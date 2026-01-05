@@ -15,7 +15,7 @@ import { haptics } from '../services/hapticsService'
 
 interface MealCameraScreenProps {
     onBack: () => void
-    onCapture: (imageUri: string) => void
+    onCapture: (imageUri: string, base64?: string) => void
 }
 
 const { width } = Dimensions.get('window')
@@ -53,11 +53,11 @@ export function MealCameraScreen({
                 setIsCapturing(true)
                 const photo = await cameraRef.current.takePictureAsync({
                     quality: 0.8,
-                    base64: false,
+                    base64: true,
                 })
                 if (photo) {
                     haptics.success()
-                    onCapture(photo.uri)
+                    onCapture(photo.uri, photo.base64)
                 }
             } catch (error) {
                 console.error('Failed to take picture:', error)

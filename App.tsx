@@ -16,11 +16,14 @@ import {
   MealCameraScreen,
   AuthScreen,
   QuizScreen,
-  ProfileScreen
+  ProfileScreen,
+  GroceryScannerScreen
 } from './src/screens'
 import { Loader } from './src/components/atoms'
 import { TabBar } from './src/components/layout'
 import { supabase } from './src/services/supabase'
+import { analyzePhoto, AnalysisResult } from './src/services/aiService'
+import { ProductData } from './src/services/barcodeService'
 import { View, StyleSheet } from 'react-native'
 import { AnimatePresence, MotiView } from 'moti'
 import { Colors } from './src/constants/theme'
@@ -28,7 +31,7 @@ import { Colors } from './src/constants/theme'
 // Keep the splash screen visible while we fetch resources
 SplashScreenNative.preventAutoHideAsync()
 
-// Mock data for demo
+// Mock data for fallback
 const MOCK_RESULT = {
   score: 82,
   verdict: 'safe' as const,
@@ -39,9 +42,10 @@ const MOCK_RESULT = {
     calories: 520,
   },
   swapSuggestion: 'Great choice! This meal fits well within your keto goals.',
+  foods: ['Mock Food'],
 }
 
-type ScreenName = 'splash' | 'quiz' | 'auth' | 'home' | 'camera' | 'result' | 'profile'
+type ScreenName = 'splash' | 'quiz' | 'auth' | 'home' | 'camera' | 'grocery-scanner' | 'result' | 'profile'
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<ScreenName>('splash')
@@ -50,6 +54,10 @@ export default function App() {
   const [authInitialized, setAuthInitialized] = useState(false)
   const [hasCompletedQuiz, setHasCompletedQuiz] = useState(false)
   const [scanCount, setScanCount] = useState(0)
+  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null)
+  const [productResult, setProductResult] = useState<ProductData | null>(null)
+  const [scanType, setScanType] = useState<'meal' | 'product'>('meal')
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
 
   // Load fonts
   const [fontsLoaded] = useFonts({
@@ -74,10 +82,8 @@ export default function App() {
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session)
       if (session) {
-        // If user logs in, we can proceed to home if they haven't already
         setCurrentScreen(prev => (prev === 'auth' ? 'home' : prev))
       } else {
-        // On logout, return to splash/onboarding
         setCurrentScreen('splash')
       }
     })
@@ -88,12 +94,9 @@ export default function App() {
   useEffect(() => {
     if (fontsLoaded && authInitialized) {
       SplashScreenNative.hideAsync()
-
-      // Initial screen routing
       if (session) {
         setCurrentScreen('home')
       } else {
-        // Fresh user starts at Splash
         setCurrentScreen('splash')
       }
     }
@@ -115,16 +118,68 @@ export default function App() {
   }, [])
 
   const handleScanProduct = useCallback(() => {
-    setCurrentScreen('camera')
+    setCurrentScreen('grocery-scanner')
   }, [])
 
-  const handleCapture = useCallback((uri: string) => {
+  // AI-powered meal capture handler
+  const handleMealCapture = useCallback(async (uri: string, base64?: string) => {
     setLastImage(uri)
     setScanCount(prev => prev + 1)
-    // Simulate processing time
-    setTimeout(() => {
+    setScanType('meal')
+
+    if (base64) {
+      try {
+        setIsAnalyzing(true)
+        const result = await analyzePhoto(base64, 'meal')
+        setAnalysisResult(result)
+        setProductResult(null)
+        setCurrentScreen('result')
+      } catch (error) {
+        console.error('AI Analysis failed:', error)
+        setAnalysisResult(MOCK_RESULT)
+        setProductResult(null)
+        setCurrentScreen('result')
+      } finally {
+        setIsAnalyzing(false)
+      }
+    } else {
+      setAnalysisResult(MOCK_RESULT)
+      setProductResult(null)
       setCurrentScreen('result')
-    }, 1500)
+    }
+  }, [])
+
+  // Barcode-based product lookup handler (No AI, database only)
+  const handleProductScanned = useCallback((product: ProductData) => {
+    setScanCount(prev => prev + 1)
+    setScanType('product')
+    setProductResult(product)
+    setAnalysisResult(null)
+    setCurrentScreen('result')
+  }, [])
+
+  const handleProductCapture = useCallback(async (uri: string, type: 'barcode' | 'ingredients', data?: string, base64?: string) => {
+    if (data) console.log('Scanned barcode:', data)
+    setLastImage(uri)
+    setScanCount(prev => prev + 1)
+
+    if (base64) {
+      try {
+        setIsAnalyzing(true)
+        const result = await analyzePhoto(base64, 'product')
+        setAnalysisResult(result)
+        setCurrentScreen('result')
+      } catch (error) {
+        console.error('AI Analysis failed:', error)
+        setAnalysisResult(MOCK_RESULT)
+        setCurrentScreen('result')
+      } finally {
+        setIsAnalyzing(false)
+      }
+    } else {
+      setAnalysisResult(MOCK_RESULT)
+      setCurrentScreen('result')
+    }
   }, [])
 
   const handleBack = useCallback(() => {
@@ -140,7 +195,6 @@ export default function App() {
   }, [session])
 
   const handleScanAgain = useCallback(() => {
-    // If it was the first scan and not logged in, maybe show auth
     if (scanCount >= 1 && !session) {
       setCurrentScreen('auth')
     } else {
@@ -162,6 +216,10 @@ export default function App() {
 
   if (!fontsLoaded || !authInitialized) {
     return <Loader fullScreen message="Loading KetoLens..." />
+  }
+
+  if (isAnalyzing) {
+    return <Loader fullScreen message="AI is analyzing your selection..." />
   }
 
   // Render current screen
@@ -191,17 +249,26 @@ export default function App() {
         return (
           <MealCameraScreen
             onBack={handleBack}
-            onCapture={handleCapture}
+            onCapture={handleMealCapture}
+          />
+        )
+      case 'grocery-scanner':
+        return (
+          <GroceryScannerScreen
+            onBack={handleBack}
+            onProductScanned={handleProductScanned}
           />
         )
       case 'result':
         return (
           <ResultScreen
-            score={MOCK_RESULT.score}
-            verdict={MOCK_RESULT.verdict}
-            macros={MOCK_RESULT.macros}
-            scanType="meal"
-            swapSuggestion={MOCK_RESULT.swapSuggestion}
+            score={scanType === 'product' ? (productResult?.ketoScore ?? 0) : (analysisResult?.score ?? MOCK_RESULT.score)}
+            verdict={scanType === 'product' ? (productResult?.ketoVerdict ?? 'avoid') : (analysisResult?.verdict ?? MOCK_RESULT.verdict)}
+            macros={scanType === 'product' ? (productResult?.macros ?? MOCK_RESULT.macros) : (analysisResult?.macros ?? MOCK_RESULT.macros)}
+            scanType={scanType}
+            swapSuggestion={scanType === 'product' ? (productResult?.swapSuggestion ?? '') : (analysisResult?.swapSuggestion ?? MOCK_RESULT.swapSuggestion)}
+            foods={analysisResult?.foods ?? []}
+            plateConfidence={analysisResult?.plateConfidence ?? 1.0}
             onBack={handleBack}
             onShare={handleShare}
             onScanAgain={handleScanAgain}

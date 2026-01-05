@@ -4,7 +4,7 @@
  */
 
 // ===== Keto Verdict Types =====
-export type KetoVerdict = 'safe' | 'borderline' | 'avoid'
+export type KetoVerdict = 'safe' | 'borderline' | 'avoid' | 'unknown'
 
 export interface KetoScore {
     score: number // 0-100
@@ -46,10 +46,20 @@ export interface Meal {
 
 export interface DetectedFood {
     name: string
-    portion: string
-    confidence: number
+    confidence: number // 0-1
+    estimated_portion?: string // e.g., "1/2 cup", "100g"
+    carb_risk: 'high' | 'medium' | 'low'
     is_keto_offender: boolean
 }
+
+export type ConfidenceLevel = 'high' | 'medium' | 'low'
+
+export function getConfidenceLevel(confidence: number): ConfidenceLevel {
+    if (confidence >= 0.85) return 'high'
+    if (confidence >= 0.65) return 'medium'
+    return 'low'
+}
+
 
 export interface Macros {
     net_carbs: number
