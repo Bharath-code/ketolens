@@ -8,6 +8,8 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { OpenAI } from 'openai';
 import type { KetoVerdict, Macros, DetectedFood } from '../types';
 import { lookupFood } from './foodDatabase';
+import { ProductData } from './barcodeService';
+import { preprocessRemoteImage } from '../utils/imageUtils';
 
 // API Keys
 const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
@@ -94,18 +96,35 @@ JSON STRUCTURE:
  * Implements Model Cascading: Gemini for meals (cheap), GPT-4o for products (precision OCR)
  */
 export async function analyzePhoto(
-    base64Image: string,
-    type: 'meal' | 'product' = 'meal'
+    imageSource: string, // Base64 or URL
+    type: 'meal' | 'product' = 'meal',
+    isUrl: boolean = false
 ): Promise<AnalysisResult> {
-    // 1. SELECT DRIVER (Model Cascading Strategy)
-    const useOpenAI = type === 'product' && openai && OPENAI_API_KEY;
+    let finalImageSource = imageSource;
+    let finalIsUrl = isUrl;
 
+    // 1. ADVANCED PREPROCESSING FOR REMOTE IMAGES (OFF)
+    if (isUrl) {
+        try {
+            const processedBase64 = await preprocessRemoteImage(imageSource);
+            if (processedBase64) {
+                finalImageSource = processedBase64;
+                finalIsUrl = false; // Now it's a processed base64
+                console.log('[AIService] Remote image preprocessed successfully');
+            }
+        } catch (err) {
+            console.error('[AIService] Remote preprocessing failed, falling back to original URL:', err);
+        }
+    }
+
+    // 2. SELECT DRIVER (Model Cascading Strategy)
+    const useOpenAI = type === 'product' && openai && OPENAI_API_KEY;
     let data: AnalysisResult;
 
     if (useOpenAI) {
-        data = await analyzeWithOpenAI(base64Image, type);
+        data = await analyzeWithOpenAI(finalImageSource, type, finalIsUrl);
     } else {
-        data = await analyzeWithGemini(base64Image, type);
+        data = await analyzeWithGemini(finalImageSource, type, finalIsUrl);
     }
 
     // 2. HYBRID DATABASE VERIFICATION + PLATE CONFIDENCE
@@ -135,9 +154,26 @@ export async function analyzePhoto(
 /**
  * Gemini Driver (Default - Fast & Cheap)
  */
-async function analyzeWithGemini(base64Image: string, type: 'meal' | 'product'): Promise<AnalysisResult> {
+async function analyzeWithGemini(imageSource: string, type: 'meal' | 'product', isUrl: boolean = false): Promise<AnalysisResult> {
     if (!GEMINI_API_KEY) {
         throw new Error('Gemini API Key missing. Add EXPO_PUBLIC_GEMINI_API_KEY to .env');
+    }
+
+    let inlineData;
+    if (isUrl) {
+        // Fetch URL and convert to base64 for Gemini (Gemini doesn't support direct URL in generateContent as easily as OpenAI)
+        const response = await fetch(imageSource);
+        const buffer = await response.arrayBuffer();
+        const base64 = btoa(new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), ''));
+        inlineData = {
+            data: base64,
+            mimeType: "image/jpeg",
+        };
+    } else {
+        inlineData = {
+            data: imageSource,
+            mimeType: "image/jpeg",
+        };
     }
 
     const model = genAI.getGenerativeModel({
@@ -155,10 +191,7 @@ async function analyzeWithGemini(base64Image: string, type: 'meal' | 'product'):
     const result = await model.generateContent([
         SYSTEM_PROMPT,
         {
-            inlineData: {
-                data: base64Image,
-                mimeType: "image/jpeg",
-            },
+            inlineData: inlineData,
         },
         prompt,
     ]);
@@ -169,8 +202,10 @@ async function analyzeWithGemini(base64Image: string, type: 'meal' | 'product'):
 /**
  * OpenAI Driver (Precision Fallback for OCR)
  */
-async function analyzeWithOpenAI(base64Image: string, type: 'meal' | 'product'): Promise<AnalysisResult> {
+async function analyzeWithOpenAI(imageSource: string, type: 'meal' | 'product', isUrl: boolean = false): Promise<AnalysisResult> {
     if (!openai) throw new Error('OpenAI client not initialized');
+
+    const imageUrl = isUrl ? imageSource : `data:image/jpeg;base64,${imageSource}`;
 
     const prompt = type === 'meal'
         ? "Analyze this meal for keto suitability. Be analytical."
@@ -187,7 +222,7 @@ async function analyzeWithOpenAI(base64Image: string, type: 'meal' | 'product'):
                     {
                         type: "image_url",
                         image_url: {
-                            url: `data:image/jpeg;base64,${base64Image}`,
+                            url: imageUrl,
                         },
                     },
                 ],

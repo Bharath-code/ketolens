@@ -24,6 +24,7 @@ import { TabBar } from './src/components/layout'
 import { supabase } from './src/services/supabase'
 import { analyzePhoto, AnalysisResult } from './src/services/aiService'
 import { ProductData } from './src/services/barcodeService'
+import { preprocessLabelImage } from './src/utils/imageUtils'
 import { View, StyleSheet } from 'react-native'
 import { AnimatePresence, MotiView } from 'moti'
 import { Colors } from './src/constants/theme'
@@ -122,63 +123,99 @@ export default function App() {
   }, [])
 
   // AI-powered meal capture handler
-  const handleMealCapture = useCallback(async (uri: string, base64?: string) => {
-    setLastImage(uri)
+  const handleMealCapture = useCallback(async (uri: string, _base64?: string) => {
     setScanCount(prev => prev + 1)
     setScanType('meal')
 
-    if (base64) {
-      try {
-        setIsAnalyzing(true)
-        const result = await analyzePhoto(base64, 'meal')
+    try {
+      setIsAnalyzing(true)
+
+      // 1. Preprocess the image
+      const processed = await preprocessLabelImage(uri)
+      setLastImage(processed.uri)
+
+      if (processed.base64) {
+        // 2. Analyze the processed image
+        const result = await analyzePhoto(processed.base64, 'meal')
         setAnalysisResult(result)
         setProductResult(null)
         setCurrentScreen('result')
-      } catch (error) {
-        console.error('AI Analysis failed:', error)
-        setAnalysisResult(MOCK_RESULT)
-        setProductResult(null)
-        setCurrentScreen('result')
-      } finally {
-        setIsAnalyzing(false)
+      } else {
+        throw new Error('Preprocessing failed to produce base64')
       }
-    } else {
+    } catch (error) {
+      console.error('Meal Analysis failed:', error)
+      setLastImage(uri)
       setAnalysisResult(MOCK_RESULT)
       setProductResult(null)
       setCurrentScreen('result')
+    } finally {
+      setIsAnalyzing(false)
     }
   }, [])
 
   // Barcode-based product lookup handler (No AI, database only)
-  const handleProductScanned = useCallback((product: ProductData) => {
+  const handleProductScanned = useCallback(async (product: ProductData) => {
     setScanCount(prev => prev + 1)
     setScanType('product')
     setProductResult(product)
     setAnalysisResult(null)
     setCurrentScreen('result')
+
+    // AUTOMATIC REFINEMENT LAYER: Fallback to Image OCR if API data is incomplete
+    if (product.needsOCR && (product.imageIngredientsUrl || product.imageUrl)) {
+      const imageUrl = product.imageIngredientsUrl || product.imageUrl;
+      if (imageUrl) {
+        console.log('[App] Metadata incomplete, triggering automatic OCR refinement from URL');
+        try {
+          const refinedResult = await analyzePhoto(imageUrl, 'product', true);
+
+          // Update product data with refined results
+          // This will automatically propagate to ResultScreen via props
+          setProductResult(prev => {
+            if (!prev || prev.barcode !== product.barcode) return prev;
+            return {
+              ...prev,
+              ingredients: refinedResult.foods.map(f => f.name),
+              ketoScore: refinedResult.score,
+              ketoVerdict: refinedResult.verdict,
+              swapSuggestion: refinedResult.swapSuggestion,
+              needsOCR: false,
+              source: 'ocr'
+            };
+          });
+        } catch (err) {
+          console.error('[App] Automatic OCR refinement failed:', err);
+        }
+      }
+    }
   }, [])
 
-  const handleProductCapture = useCallback(async (uri: string, type: 'barcode' | 'ingredients', data?: string, base64?: string) => {
-    if (data) console.log('Scanned barcode:', data)
-    setLastImage(uri)
+  const handleProductCapture = useCallback(async (uri: string, _type: 'barcode' | 'ingredients', _data?: string, _base64?: string) => {
     setScanCount(prev => prev + 1)
 
-    if (base64) {
-      try {
-        setIsAnalyzing(true)
-        const result = await analyzePhoto(base64, 'product')
+    try {
+      setIsAnalyzing(true)
+
+      // 1. Preprocess the image
+      const processed = await preprocessLabelImage(uri)
+      setLastImage(processed.uri)
+
+      if (processed.base64) {
+        // 2. Analyze the processed product image
+        const result = await analyzePhoto(processed.base64, 'product')
         setAnalysisResult(result)
         setCurrentScreen('result')
-      } catch (error) {
-        console.error('AI Analysis failed:', error)
-        setAnalysisResult(MOCK_RESULT)
-        setCurrentScreen('result')
-      } finally {
-        setIsAnalyzing(false)
+      } else {
+        throw new Error('Preprocessing failed to produce base64')
       }
-    } else {
+    } catch (error) {
+      console.error('Product Analysis failed:', error)
+      setLastImage(uri)
       setAnalysisResult(MOCK_RESULT)
       setCurrentScreen('result')
+    } finally {
+      setIsAnalyzing(false)
     }
   }, [])
 
@@ -269,11 +306,13 @@ export default function App() {
             swapSuggestion={scanType === 'product' ? (productResult?.swapSuggestion ?? '') : (analysisResult?.swapSuggestion ?? MOCK_RESULT.swapSuggestion)}
             foods={analysisResult?.foods ?? []}
             plateConfidence={analysisResult?.plateConfidence ?? 1.0}
+            productName={productResult?.name}
+            userId={session?.user?.id}
             onBack={handleBack}
-            onShare={handleShare}
             onScanAgain={handleScanAgain}
           />
         )
+
       default:
         return <SplashScreen onGetStarted={handleGetStarted} />
     }

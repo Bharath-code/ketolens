@@ -1,21 +1,24 @@
 /**
  * ResultScreen
  * Displays keto score, verdict, macros, and share option
- * Includes confidence-based "Tap to Review" flow
+ * Includes confidence-based "Tap to Review" flow and share card capture
  */
 
-import React, { useState, useCallback } from 'react'
-import { View, StyleSheet, Pressable } from 'react-native'
+import React, { useState, useCallback, useRef } from 'react'
+import { View, StyleSheet, Pressable, ScrollView } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { Button, Text } from '../components/atoms'
-import { ScoreCircle, VerdictPill, MacroChart, CorrectionSheet, CorrectionResult } from '../components/ui'
+import { Button, Text, Loader } from '../components/atoms'
+import { ScoreCircle, VerdictPill, MacroChart, CorrectionSheet, ShareCard } from '../components/ui'
+import type { CorrectionResult } from '../components/ui/CorrectionSheet'
 import { Colors, Spacing, BorderRadius } from '../constants/theme'
 import { AnimatedView } from '../components/layout/AnimatedView'
 import ConfettiCannon from 'react-native-confetti-cannon'
-import type { KetoVerdict, Macros, ScanType, DetectedFood, getConfidenceLevel } from '../types'
+import type { KetoVerdict, Macros, ScanType, DetectedFood } from '../types'
 import { haptics } from '../services/hapticsService'
 import { logCorrection } from '../services/logService'
-import { AlertTriangle } from 'lucide-react-native'
+import { ShadowDbService } from '../services/shadowDbService'
+import { shareResult } from '../services/shareService'
+import { AlertTriangle, Share2 } from 'lucide-react-native'
 
 interface ResultScreenProps {
     score: number
@@ -26,8 +29,9 @@ interface ResultScreenProps {
     foods?: DetectedFood[]
     plateConfidence?: number
     scanId?: string
+    productName?: string
+    userId?: string
     onBack: () => void
-    onShare: () => void
     onScanAgain: () => void
     onRecalculate?: (foods: DetectedFood[]) => void
 }
@@ -42,15 +46,25 @@ export function ResultScreen(props: ResultScreenProps) {
         foods = [],
         plateConfidence = 1.0,
         scanId = 'unknown',
+        productName,
+        userId,
         onBack,
-        onShare,
         onScanAgain,
         onRecalculate,
     } = props
 
+    // Debug logging
+    console.log('[ResultScreen] Props received:')
+    console.log('  - userId:', userId)
+    console.log('  - productName:', productName)
+    console.log('  - score:', score)
+    console.log('  - verdict:', verdict)
+
+    const shareCardRef = useRef<View>(null)
     const [showCorrectionSheet, setShowCorrectionSheet] = useState(false)
     const [currentScore, setCurrentScore] = useState(score)
     const [currentVerdict, setCurrentVerdict] = useState(verdict)
+    const [isSharing, setIsSharing] = useState(false)
 
     const title = scanType === 'meal' ? 'Meal Analysis' : 'Product Analysis'
     const isHighScore = currentScore >= 80
@@ -62,15 +76,14 @@ export function ResultScreen(props: ResultScreenProps) {
     const handleCorrections = useCallback(async (corrections: CorrectionResult[]) => {
         haptics.success()
 
-        // Log corrections silently
+        // Log corrections to Shadow DB
         for (const c of corrections) {
-            await logCorrection({
-                scan_id: scanId,
-                food_label: c.originalFood.name,
-                model_confidence: c.originalFood.confidence,
-                user_action: c.action,
-                replacement_label: c.replacementName,
-                timestamp: new Date().toISOString(),
+            await ShadowDbService.submitCorrection({
+                product_id: scanId, // In this context, scanId should be product_id from Shadow DB if available
+                scan_event_id: scanId, // Need to handle IDs mapping carefully
+                action: c.action,
+                original_label: c.originalFood.name,
+                corrected_label: c.replacementName,
             })
         }
 
@@ -80,7 +93,7 @@ export function ResultScreen(props: ResultScreenProps) {
             if (!correction) return food
 
             if (correction.action === 'removed') {
-                return null // Will be filtered out
+                return null
             }
             if (correction.action === 'replaced' && correction.replacementName) {
                 return { ...food, name: correction.replacementName }
@@ -88,12 +101,10 @@ export function ResultScreen(props: ResultScreenProps) {
             return food
         }).filter(Boolean) as DetectedFood[]
 
-        // Trigger recalculation if callback provided
         if (onRecalculate) {
             onRecalculate(updatedFoods)
         }
 
-        // Simple score adjustment for demo (in production, this would be a full recalc)
         const removedCount = corrections.filter(c => c.action === 'removed').length
         const newScore = Math.min(100, currentScore + (removedCount * 5))
         setCurrentScore(newScore)
@@ -103,8 +114,41 @@ export function ResultScreen(props: ResultScreenProps) {
         }
     }, [foods, scanId, currentScore, currentVerdict, onRecalculate])
 
+    const handleShare = useCallback(async () => {
+        haptics.light()
+        setIsSharing(true)
+
+        try {
+            await shareResult(shareCardRef, {
+                score: currentScore,
+                verdict: currentVerdict,
+                userId,
+                productName,
+            })
+        } catch (error) {
+            console.error('Share failed:', error)
+        } finally {
+            setIsSharing(false)
+        }
+    }, [currentScore, currentVerdict, userId, productName])
+
+    if (isSharing) {
+        return <Loader fullScreen message="Preparing share card..." />
+    }
+
     return (
         <SafeAreaView style={styles.container}>
+            {/* Hidden Share Card (off-screen for capture) */}
+            <View style={styles.hiddenCardContainer}>
+                <ShareCard
+                    ref={shareCardRef}
+                    score={currentScore}
+                    verdict={currentVerdict}
+                    macros={macros}
+                    productName={productName}
+                />
+            </View>
+
             {/* Header */}
             <View style={styles.header}>
                 <Pressable onPress={onBack} style={styles.backButton}>
@@ -114,12 +158,19 @@ export function ResultScreen(props: ResultScreenProps) {
                 <View style={styles.placeholder} />
             </View>
 
-            <View style={styles.content}>
+            <ScrollView style={styles.scrollContent} contentContainerStyle={styles.content}>
                 {/* Score Section */}
                 <AnimatedView animation="scaleIn" delay={200} style={styles.scoreSection}>
                     <ScoreCircle score={currentScore} verdict={currentVerdict} animated={true} />
                     <VerdictPill verdict={currentVerdict} size="lg" />
                 </AnimatedView>
+
+                {/* Product Name */}
+                {productName && (
+                    <Text variant="body" size="base" color={Colors.gray600} align="center" style={{ marginBottom: Spacing.lg }}>
+                        {productName}
+                    </Text>
+                )}
 
                 {/* Tap to Review Prompt */}
                 {shouldShowReviewPrompt && foods.length > 0 && (
@@ -150,7 +201,7 @@ export function ResultScreen(props: ResultScreenProps) {
 
                 {/* Swap Suggestion */}
                 {swapSuggestion && (
-                    <AnimatedView animation="slideUp" delay={1000} style={[styles.swap, styles[`swap_${currentVerdict}`]]}>
+                    <AnimatedView animation="slideUp" delay={1000} style={[styles.swap, styles[`swap_${currentVerdict}`] || styles.swap_unknown]}>
                         <Text variant="heading" size="base">
                             {currentVerdict === 'safe' ? '✅ Great choice!' : '💡 Keto-friendly swap'}
                         </Text>
@@ -159,11 +210,16 @@ export function ResultScreen(props: ResultScreenProps) {
                         </Text>
                     </AnimatedView>
                 )}
-            </View>
+            </ScrollView>
 
             {/* Action Buttons */}
             <AnimatedView animation="slideUp" delay={1200} style={styles.actions}>
-                <Button variant="secondary" fullWidth onPress={onShare} containerStyle={styles.button}>
+                <Button
+                    variant="secondary"
+                    fullWidth
+                    onPress={handleShare}
+                    containerStyle={styles.button}
+                >
                     Share Result
                 </Button>
                 <Button variant="primary" fullWidth onPress={onScanAgain} containerStyle={styles.button}>
@@ -196,6 +252,11 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: Colors.white,
     },
+    hiddenCardContainer: {
+        position: 'absolute',
+        left: -1000, // Off-screen
+        top: 0,
+    },
     header: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -214,8 +275,10 @@ const styles = StyleSheet.create({
     placeholder: {
         width: 44,
     },
-    content: {
+    scrollContent: {
         flex: 1,
+    },
+    content: {
         padding: Spacing['2xl'],
     },
     scoreSection: {
@@ -266,6 +329,8 @@ const styles = StyleSheet.create({
     actions: {
         padding: Spacing['2xl'],
         gap: Spacing.md,
+        borderTopWidth: 1,
+        borderTopColor: Colors.gray100,
     },
     button: {
         marginBottom: Spacing.sm,

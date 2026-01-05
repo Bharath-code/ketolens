@@ -41,6 +41,13 @@ export function GroceryScannerScreen({
         try {
             setIsLookingUp(true)
             const product = await lookupProduct(result.data)
+
+            if (!product.found) {
+                haptics.warning()
+                // Show "Not Found" state or suggest OCR
+                // For now, we'll still pass it to ResultScreen which can show the "Not Found" message
+            }
+
             onProductScanned(product)
         } catch (error) {
             console.error('Product lookup failed:', error)
