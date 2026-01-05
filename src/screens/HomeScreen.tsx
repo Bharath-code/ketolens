@@ -8,6 +8,8 @@ import { View, StyleSheet, Pressable, TouchableOpacity } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Text } from '../components/atoms'
 import { Colors, Spacing, BorderRadius, Shadows } from '../constants/theme'
+import { AnimatedView } from '../components/layout/AnimatedView'
+import { haptics } from '../services/hapticsService'
 
 interface HomeScreenProps {
     userName?: string
@@ -26,7 +28,7 @@ export function HomeScreen({
         <SafeAreaView style={styles.container}>
             <View style={styles.content}>
                 {/* Header */}
-                <View style={styles.header}>
+                <AnimatedView animation="slideUp" delay={0} style={styles.header}>
                     <View style={styles.greeting}>
                         <View style={styles.nameRow}>
                             <Text variant="heading" size="2xl">
@@ -45,7 +47,7 @@ export function HomeScreen({
                             scans left
                         </Text>
                     </View>
-                </View>
+                </AnimatedView>
 
                 {/* Main CTAs */}
                 <View style={styles.ctas}>
@@ -54,36 +56,52 @@ export function HomeScreen({
                     </Text>
 
                     {/* Scan Meal Card */}
-                    <Pressable style={styles.ctaCard} onPress={onScanMeal}>
-                        <View style={[styles.ctaIcon, styles.ctaIconMeal]}>
-                            <Text variant="body" size="2xl">🍽️</Text>
-                        </View>
-                        <View style={styles.ctaContent}>
-                            <Text variant="heading" size="xl">Scan Meal</Text>
-                            <Text variant="body" size="sm" color={Colors.gray500}>
-                                Take a photo of your meal for instant keto analysis
-                            </Text>
-                        </View>
-                        <Text variant="body" size="2xl" color={Colors.gray400}>→</Text>
-                    </Pressable>
+                    <AnimatedView animation="slideUp" delay={50}>
+                        <Pressable
+                            style={styles.ctaCard}
+                            onPress={() => {
+                                haptics.light()
+                                onScanMeal()
+                            }}
+                        >
+                            <View style={[styles.ctaIcon, styles.ctaIconMeal]}>
+                                <Text variant="body" size="2xl">🍽️</Text>
+                            </View>
+                            <View style={styles.ctaContent}>
+                                <Text variant="heading" size="xl">Scan Meal</Text>
+                                <Text variant="body" size="sm" color={Colors.gray500}>
+                                    Take a photo of your meal for instant keto analysis
+                                </Text>
+                            </View>
+                            <Text variant="body" size="2xl" color={Colors.gray400}>→</Text>
+                        </Pressable>
+                    </AnimatedView>
 
                     {/* Scan Product Card */}
-                    <Pressable style={styles.ctaCard} onPress={onScanProduct}>
-                        <View style={[styles.ctaIcon, styles.ctaIconProduct]}>
-                            <Text variant="body" size="2xl">🏷️</Text>
-                        </View>
-                        <View style={styles.ctaContent}>
-                            <Text variant="heading" size="xl">Scan Product</Text>
-                            <Text variant="body" size="sm" color={Colors.gray500}>
-                                Check grocery items before you buy
-                            </Text>
-                        </View>
-                        <Text variant="body" size="2xl" color={Colors.gray400}>→</Text>
-                    </Pressable>
+                    <AnimatedView animation="slideUp" delay={100}>
+                        <Pressable
+                            style={styles.ctaCard}
+                            onPress={() => {
+                                haptics.light()
+                                onScanProduct()
+                            }}
+                        >
+                            <View style={[styles.ctaIcon, styles.ctaIconProduct]}>
+                                <Text variant="body" size="2xl">🏷️</Text>
+                            </View>
+                            <View style={styles.ctaContent}>
+                                <Text variant="heading" size="xl">Scan Product</Text>
+                                <Text variant="body" size="sm" color={Colors.gray500}>
+                                    Check grocery items before you buy
+                                </Text>
+                            </View>
+                            <Text variant="body" size="2xl" color={Colors.gray400}>→</Text>
+                        </Pressable>
+                    </AnimatedView>
                 </View>
 
                 {/* Recent Scans Preview */}
-                <View style={styles.recent}>
+                <AnimatedView animation="slideUp" delay={150} style={styles.recent}>
                     <View style={styles.recentHeader}>
                         <Text variant="heading" size="base">Recent Scans</Text>
                         <Text variant="body" size="sm" color={Colors.ketoSafe}>View All</Text>
@@ -94,7 +112,7 @@ export function HomeScreen({
                             No scans yet. Start by scanning a meal or product!
                         </Text>
                     </View>
-                </View>
+                </AnimatedView>
             </View>
         </SafeAreaView>
     )

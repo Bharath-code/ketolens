@@ -8,6 +8,8 @@ import {
 import { Screen } from '../components/layout/Screen'
 import { Button, Text } from '../components/atoms'
 import { Colors, Spacing, BorderRadius } from '../constants/theme'
+import { MotiView } from 'moti'
+import { haptics } from '../services/hapticsService'
 
 const { width } = Dimensions.get('window')
 
@@ -67,7 +69,11 @@ export function QuizScreen({ onComplete }: QuizScreenProps) {
         <Screen padding={false} scrollable={false}>
             <View style={styles.container}>
                 <View style={styles.progressBarContainer}>
-                    <View style={[styles.progressBar, { width: `${progress}%` }]} />
+                    <MotiView
+                        animate={{ width: `${progress}%` }}
+                        transition={{ type: 'timing', duration: 500 }}
+                        style={styles.progressBar}
+                    />
                 </View>
 
                 <View style={styles.content}>
@@ -79,23 +85,32 @@ export function QuizScreen({ onComplete }: QuizScreenProps) {
                     </Text>
 
                     <View style={styles.optionsContainer}>
-                        {currentQuestion.options.map((option) => (
-                            <TouchableOpacity
-                                key={option}
-                                style={[
-                                    styles.optionButton,
-                                    answers[currentQuestion.id] === option && styles.optionButtonActive
-                                ]}
-                                onPress={() => handleSelect(option)}
+                        {currentQuestion.options.map((option, index) => (
+                            <MotiView
+                                key={`${step}-${option}`}
+                                from={{ opacity: 0, translateY: 10 }}
+                                animate={{ opacity: 1, translateY: 0 }}
+                                transition={{ type: 'timing', duration: 300, delay: index * 100 }}
                             >
-                                <Text
-                                    variant="body"
-                                    weight="medium"
-                                    color={answers[currentQuestion.id] === option ? Colors.white : Colors.gray800}
+                                <TouchableOpacity
+                                    style={[
+                                        styles.optionButton,
+                                        answers[currentQuestion.id] === option && styles.optionButtonActive
+                                    ]}
+                                    onPress={() => {
+                                        haptics.light()
+                                        handleSelect(option)
+                                    }}
                                 >
-                                    {option}
-                                </Text>
-                            </TouchableOpacity>
+                                    <Text
+                                        variant="body"
+                                        weight="medium"
+                                        color={answers[currentQuestion.id] === option ? Colors.white : Colors.gray800}
+                                    >
+                                        {option}
+                                    </Text>
+                                </TouchableOpacity>
+                            </MotiView>
                         ))}
                     </View>
                 </View>

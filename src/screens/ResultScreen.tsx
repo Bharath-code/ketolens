@@ -9,6 +9,8 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { Button, Text } from '../components/atoms'
 import { ScoreCircle, VerdictPill, MacroChart } from '../components/ui'
 import { Colors, Spacing, BorderRadius } from '../constants/theme'
+import { AnimatedView } from '../components/layout/AnimatedView'
+import ConfettiCannon from 'react-native-confetti-cannon'
 import type { KetoVerdict, Macros, ScanType } from '../types'
 
 interface ResultScreenProps {
@@ -22,17 +24,20 @@ interface ResultScreenProps {
     onScanAgain: () => void
 }
 
-export function ResultScreen({
-    score,
-    verdict,
-    macros,
-    scanType,
-    swapSuggestion,
-    onBack,
-    onShare,
-    onScanAgain,
-}: ResultScreenProps) {
+export function ResultScreen(props: ResultScreenProps) {
+    const {
+        score,
+        verdict,
+        macros,
+        scanType,
+        swapSuggestion,
+        onBack,
+        onShare,
+        onScanAgain,
+    } = props
+
     const title = scanType === 'meal' ? 'Meal Analysis' : 'Product Analysis'
+    const isHighScore = score >= 80
 
     return (
         <SafeAreaView style={styles.container}>
@@ -47,41 +52,50 @@ export function ResultScreen({
 
             <View style={styles.content}>
                 {/* Score Section */}
-                <View style={styles.scoreSection}>
+                <AnimatedView animation="scaleIn" delay={200} style={styles.scoreSection}>
                     <ScoreCircle score={score} verdict={verdict} animated={true} />
                     <VerdictPill verdict={verdict} size="lg" />
-                </View>
+                </AnimatedView>
 
                 {/* Macros Section */}
                 {macros && (
-                    <View style={styles.macrosSection}>
+                    <AnimatedView animation="slideUp" delay={800} style={styles.macrosSection}>
                         <Text variant="heading" size="lg">Nutritional Breakdown</Text>
                         <MacroChart macros={macros} showLabels={true} />
-                    </View>
+                    </AnimatedView>
                 )}
 
                 {/* Swap Suggestion */}
                 {swapSuggestion && (
-                    <View style={[styles.swap, styles[`swap_${verdict}`]]}>
+                    <AnimatedView animation="slideUp" delay={1000} style={[styles.swap, styles[`swap_${verdict}`]]}>
                         <Text variant="heading" size="base">
                             {verdict === 'safe' ? '✅ Great choice!' : '💡 Keto-friendly swap'}
                         </Text>
                         <Text variant="body" size="base">
                             {swapSuggestion}
                         </Text>
-                    </View>
+                    </AnimatedView>
                 )}
             </View>
 
-            {/* Actions */}
-            <View style={styles.actions}>
-                <Button variant="primary" size="lg" fullWidth onPress={onShare}>
+            {/* Action Buttons */}
+            <AnimatedView animation="slideUp" delay={1200} style={styles.actions}>
+                <Button variant="secondary" fullWidth onPress={onShare} containerStyle={styles.button}>
                     Share Result
                 </Button>
-                <Button variant="secondary" size="lg" fullWidth onPress={onScanAgain}>
+                <Button variant="primary" fullWidth onPress={onScanAgain} containerStyle={styles.button}>
                     Scan Another
                 </Button>
-            </View>
+            </AnimatedView>
+
+            {isHighScore && (
+                <ConfettiCannon
+                    count={150}
+                    origin={{ x: -10, y: 0 }}
+                    fadeOut={true}
+                    colors={[Colors.ketoSafe, '#FFD700', '#FFFFFF']}
+                />
+            )}
         </SafeAreaView>
     )
 }
@@ -148,5 +162,7 @@ const styles = StyleSheet.create({
         padding: Spacing['2xl'],
         gap: Spacing.md,
     },
+    button: {
+        marginBottom: Spacing.sm,
+    },
 })
-

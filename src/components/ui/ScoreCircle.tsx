@@ -9,6 +9,7 @@ import { Text } from '../atoms/Text'
 import { Colors, FontSize } from '../../constants/theme'
 import { getVerdictColor } from '../../constants/theme'
 import type { KetoVerdict } from '../../types'
+import { haptics } from '../../services/hapticsService'
 
 interface ScoreCircleProps {
     score: number
@@ -77,7 +78,7 @@ export function ScoreCircle({
             />
             {/* Score text */}
             <View style={styles.content}>
-                <AnimatedScore value={displayScore} color={scoreColor} />
+                <AnimatedScore value={displayScore} color={scoreColor} finalScore={score} />
                 <Text variant="caption" weight="semibold" style={styles.label}>
                     {verdict.toUpperCase()}
                 </Text>
@@ -86,16 +87,35 @@ export function ScoreCircle({
     )
 }
 
-// Animated score number component
-function AnimatedScore({ value, color }: { value: Animated.AnimatedInterpolation<number>; color: string }) {
+function AnimatedScore({ value, color, finalScore }: { value: Animated.AnimatedInterpolation<number>; color: string; finalScore: number }) {
     const [displayValue, setDisplayValue] = React.useState(0)
+    const hapticMilestones = useRef(new Set<number>()).current
 
     useEffect(() => {
         const listener = value.addListener(({ value: v }) => {
-            setDisplayValue(Math.round(v))
+            const rounded = Math.round(v)
+            setDisplayValue(rounded)
+
+            // Trigger haptics at milestones
+            if (finalScore > 0) {
+                const progress = rounded / finalScore
+                if (progress >= 0.25 && !hapticMilestones.has(25)) {
+                    haptics.light()
+                    hapticMilestones.add(25)
+                } else if (progress >= 0.5 && !hapticMilestones.has(50)) {
+                    haptics.medium()
+                    hapticMilestones.add(50)
+                } else if (progress >= 0.75 && !hapticMilestones.has(75)) {
+                    haptics.medium()
+                    hapticMilestones.add(75)
+                } else if (progress >= 1 && !hapticMilestones.has(100)) {
+                    haptics.success()
+                    hapticMilestones.add(100)
+                }
+            }
         })
         return () => value.removeListener(listener)
-    }, [value])
+    }, [value, finalScore])
 
     return (
         <Text

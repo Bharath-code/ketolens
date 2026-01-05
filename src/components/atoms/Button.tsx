@@ -15,6 +15,7 @@ import {
 } from 'react-native'
 import { Colors, Spacing, FontSize, BorderRadius, Shadows } from '../../constants/theme'
 import type { ButtonVariant, ButtonSize } from '../../types'
+import { haptics } from '../../services/hapticsService'
 
 interface ButtonProps {
     variant?: ButtonVariant
@@ -25,6 +26,7 @@ interface ButtonProps {
     onPress?: () => void
     fullWidth?: boolean
     containerStyle?: StyleProp<ViewStyle>
+    haptic?: boolean
 }
 
 export function Button({
@@ -36,12 +38,16 @@ export function Button({
     onPress,
     fullWidth = false,
     containerStyle,
+    haptic = true,
 }: ButtonProps) {
     const [isPressed, setIsPressed] = useState(false)
 
     const handlePressIn = useCallback(() => {
-        if (!disabled && !loading) setIsPressed(true)
-    }, [disabled, loading])
+        if (!disabled && !loading) {
+            setIsPressed(true)
+            if (haptic) haptics.light()
+        }
+    }, [disabled, loading, haptic])
 
     const handlePressOut = useCallback(() => {
         setIsPressed(false)
@@ -94,6 +100,7 @@ export function Button({
             onPressIn={handlePressIn}
             onPressOut={handlePressOut}
             disabled={disabled || loading}
+            android_ripple={{ color: 'rgba(255, 255, 255, 0.2)', borderless: false }}
         >
             {loading ? (
                 <ActivityIndicator

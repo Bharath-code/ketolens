@@ -10,6 +10,8 @@ import { CameraView, useCameraPermissions } from 'expo-camera'
 import { Navbar, Screen } from '../components/layout'
 import { Button, Text, Loader } from '../components/atoms'
 import { Colors, Spacing, BorderRadius } from '../constants/theme'
+import { MotiView } from 'moti'
+import { haptics } from '../services/hapticsService'
 
 interface MealCameraScreenProps {
     onBack: () => void
@@ -54,6 +56,7 @@ export function MealCameraScreen({
                     base64: false,
                 })
                 if (photo) {
+                    haptics.success()
                     onCapture(photo.uri)
                 }
             } catch (error) {
@@ -77,14 +80,24 @@ export function MealCameraScreen({
                     facing="back"
                 />
 
-                {/* Focus Guide Overlay - Moved outside CameraView as it doesn't support children */}
+                {/* Focus Guide Overlay */}
                 <View style={styles.overlay} pointerEvents="none">
-                    <View style={styles.focusGuide}>
+                    <MotiView
+                        from={{ scale: 1, opacity: 0.6 }}
+                        animate={{ scale: 1.05, opacity: 1 }}
+                        transition={{
+                            type: 'timing',
+                            duration: 1000,
+                            loop: true,
+                            repeatReverse: true,
+                        }}
+                        style={styles.focusGuide}
+                    >
                         <View style={[styles.corner, styles.tl]} />
                         <View style={[styles.corner, styles.tr]} />
                         <View style={[styles.corner, styles.bl]} />
                         <View style={[styles.corner, styles.br]} />
-                    </View>
+                    </MotiView>
                 </View>
 
                 {/* Controls */}
@@ -96,7 +109,10 @@ export function MealCameraScreen({
                     <View style={styles.captureButtonContainer}>
                         <TouchableOpacity
                             style={[styles.captureButton, isCapturing && styles.disabled]}
-                            onPress={handleCapture}
+                            onPress={() => {
+                                haptics.medium()
+                                handleCapture()
+                            }}
                             disabled={isCapturing}
                         >
                             <View style={styles.captureInner} />

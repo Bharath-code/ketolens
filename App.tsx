@@ -22,6 +22,8 @@ import { Loader } from './src/components/atoms'
 import { TabBar } from './src/components/layout'
 import { supabase } from './src/services/supabase'
 import { View, StyleSheet } from 'react-native'
+import { AnimatePresence, MotiView } from 'moti'
+import { Colors } from './src/constants/theme'
 
 // Keep the splash screen visible while we fetch resources
 SplashScreenNative.preventAutoHideAsync()
@@ -167,13 +169,10 @@ export default function App() {
     switch (currentScreen) {
       case 'splash':
         return <SplashScreen onGetStarted={handleGetStarted} />
-
       case 'quiz':
         return <QuizScreen onComplete={handleQuizComplete} />
-
       case 'auth':
         return <AuthScreen />
-
       case 'home':
         return (
           <HomeScreen
@@ -181,7 +180,6 @@ export default function App() {
             onScanProduct={handleScanProduct}
           />
         )
-
       case 'profile':
         return (
           <ProfileScreen
@@ -189,7 +187,6 @@ export default function App() {
             onLogout={handleLogout}
           />
         )
-
       case 'camera':
         return (
           <MealCameraScreen
@@ -197,7 +194,6 @@ export default function App() {
             onCapture={handleCapture}
           />
         )
-
       case 'result':
         return (
           <ResultScreen
@@ -211,7 +207,6 @@ export default function App() {
             onScanAgain={handleScanAgain}
           />
         )
-
       default:
         return <SplashScreen onGetStarted={handleGetStarted} />
     }
@@ -223,9 +218,23 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <StatusBar style="dark" />
-      <View style={styles.container}>
+      <View style={[styles.container, { backgroundColor: Colors.white }]}>
         <View style={styles.content}>
-          {renderScreen()}
+          <AnimatePresence>
+            <MotiView
+              key={currentScreen}
+              from={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{
+                type: 'timing',
+                duration: 200,
+              }}
+              style={styles.screenWrapper}
+            >
+              {renderScreen()}
+            </MotiView>
+          </AnimatePresence>
         </View>
         {showTabBar && (
           <TabBar activeTab={activeTab} onTabChange={handleTabChange} />
@@ -238,8 +247,14 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: Colors.white,
   },
   content: {
     flex: 1,
+    backgroundColor: Colors.white,
+  },
+  screenWrapper: {
+    flex: 1,
+    backgroundColor: Colors.white,
   },
 })
