@@ -4,7 +4,8 @@
  */
 
 import React from 'react'
-import { View, StyleSheet, Pressable, SafeAreaView } from 'react-native'
+import { View, StyleSheet, Pressable, TouchableOpacity } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { Text } from '../components/atoms'
 import { Colors, Spacing, BorderRadius, Shadows } from '../constants/theme'
 
@@ -13,6 +14,7 @@ interface HomeScreenProps {
     scansRemaining?: number
     onScanMeal: () => void
     onScanProduct: () => void
+    onProfile: () => void
 }
 
 export function HomeScreen({
@@ -20,6 +22,7 @@ export function HomeScreen({
     scansRemaining = 5,
     onScanMeal,
     onScanProduct,
+    onProfile,
 }: HomeScreenProps) {
     return (
         <SafeAreaView style={styles.container}>
@@ -27,11 +30,16 @@ export function HomeScreen({
                 {/* Header */}
                 <View style={styles.header}>
                     <View style={styles.greeting}>
+                        <View style={styles.nameRow}>
+                            <Text variant="heading" size="2xl">
+                                {userName} 👋
+                            </Text>
+                            <TouchableOpacity onPress={onProfile} style={styles.profileBtn}>
+                                <Text variant="body" size="lg">👤</Text>
+                            </TouchableOpacity>
+                        </View>
                         <Text variant="body" size="base" color={Colors.gray500}>
-                            Welcome back,
-                        </Text>
-                        <Text variant="heading" size="2xl">
-                            {userName} 👋
+                            Ready to stay in ketosis?
                         </Text>
                     </View>
                     <View style={styles.scansBadge}>
@@ -114,6 +122,16 @@ const styles = StyleSheet.create({
     },
     greeting: {
         gap: Spacing.xs,
+        flex: 1,
+    },
+    nameRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingRight: Spacing.md,
+    },
+    profileBtn: {
+        padding: Spacing.sm,
     },
     scansBadge: {
         alignItems: 'center',
@@ -168,4 +186,3 @@ const styles = StyleSheet.create({
     },
 })
 
-export default HomeScreen

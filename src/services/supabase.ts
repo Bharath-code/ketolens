@@ -1,22 +1,15 @@
-/**
- * Supabase Client Configuration
- * Placeholder for Expo
- */
+import 'react-native-url-polyfill/auto'
+import AsyncStorage from '@react-native-async-storage/async-storage'
+import { createClient } from '@supabase/supabase-js'
 
-// TODO: Replace with your Supabase credentials
-export const SUPABASE_URL = 'YOUR_SUPABASE_URL'
-export const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY'
+export const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || ''
+export const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || ''
 
-export const supabase = {
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: {
-        signInWithPassword: async ({ email }: { email: string }) => {
-            console.log('Mock login:', email)
-            return { data: { user: { id: 'mock', email } }, error: null }
-        },
-        signOut: async () => ({ error: null }),
+        storage: AsyncStorage,
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: false,
     },
-    from: (table: string) => ({
-        select: () => ({ data: [], error: null }),
-        insert: (data: any) => ({ data, error: null }),
-    }),
-}
+})

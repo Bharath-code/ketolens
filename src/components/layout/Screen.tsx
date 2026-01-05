@@ -7,7 +7,6 @@ import React from 'react'
 import {
     View,
     StyleSheet,
-    SafeAreaView,
     ScrollView,
     ViewStyle,
     StatusBar,

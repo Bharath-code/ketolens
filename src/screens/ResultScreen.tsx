@@ -4,7 +4,8 @@
  */
 
 import React from 'react'
-import { View, StyleSheet, SafeAreaView, Pressable } from 'react-native'
+import { View, StyleSheet, Pressable } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { Button, Text } from '../components/atoms'
 import { ScoreCircle, VerdictPill, MacroChart } from '../components/ui'
 import { Colors, Spacing, BorderRadius } from '../constants/theme'
@@ -149,4 +150,3 @@ const styles = StyleSheet.create({
     },
 })
 
-export default ResultScreen

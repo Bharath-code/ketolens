@@ -24,6 +24,7 @@ interface ButtonProps {
     loading?: boolean
     onPress?: () => void
     fullWidth?: boolean
+    containerStyle?: StyleProp<ViewStyle>
 }
 
 export function Button({
@@ -34,6 +35,7 @@ export function Button({
     loading = false,
     onPress,
     fullWidth = false,
+    containerStyle,
 }: ButtonProps) {
     const [isPressed, setIsPressed] = useState(false)
 
@@ -65,6 +67,7 @@ export function Button({
             isPressed && styles.pressed,
             disabled && styles.disabled,
             fullWidth && styles.fullWidth,
+            containerStyle,
         ]
     }
 

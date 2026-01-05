@@ -1,20 +1,25 @@
-/**
- * KetoLens App
- * Main application entry point with font loading and navigation
- */
-
 import React, { useState, useCallback, useEffect } from 'react'
 import { StatusBar } from 'expo-status-bar'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import * as SplashScreenNative from 'expo-splash-screen'
+import { Session } from '@supabase/supabase-js'
 
 // Fonts
 import { useFonts, Inter_400Regular, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter'
 import { Poppins_400Regular, Poppins_600SemiBold, Poppins_700Bold, Poppins_800ExtraBold } from '@expo-google-fonts/poppins'
 
 // Components
-import { SplashScreen, HomeScreen, ResultScreen, MealCameraScreen } from './src/screens'
+import {
+  SplashScreen,
+  HomeScreen,
+  ResultScreen,
+  MealCameraScreen,
+  AuthScreen,
+  QuizScreen,
+  ProfileScreen
+} from './src/screens'
 import { Loader } from './src/components/atoms'
+import { supabase } from './src/services/supabase'
 
 // Keep the splash screen visible while we fetch resources
 SplashScreenNative.preventAutoHideAsync()
@@ -32,11 +37,15 @@ const MOCK_RESULT = {
   swapSuggestion: 'Great choice! This meal fits well within your keto goals.',
 }
 
-type ScreenName = 'splash' | 'home' | 'camera' | 'result'
+type ScreenName = 'splash' | 'quiz' | 'auth' | 'home' | 'camera' | 'result' | 'profile'
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<ScreenName>('splash')
   const [lastImage, setLastImage] = useState<string | null>(null)
+  const [session, setSession] = useState<Session | null>(null)
+  const [authInitialized, setAuthInitialized] = useState(false)
+  const [hasCompletedQuiz, setHasCompletedQuiz] = useState(false)
+  const [scanCount, setScanCount] = useState(0)
 
   // Load fonts
   const [fontsLoaded] = useFonts({
@@ -49,14 +58,51 @@ export default function App() {
     Poppins_800ExtraBold,
   })
 
+  // Handle Auth Session
   useEffect(() => {
-    if (fontsLoaded) {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session)
+      setAuthInitialized(true)
+    })
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session)
+      if (session) {
+        // If user logs in, we can proceed to home if they haven't already
+        setCurrentScreen(prev => (prev === 'auth' ? 'home' : prev))
+      } else {
+        // On logout, return to splash/onboarding
+        setCurrentScreen('splash')
+      }
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
+  useEffect(() => {
+    if (fontsLoaded && authInitialized) {
       SplashScreenNative.hideAsync()
+
+      // Initial screen routing
+      if (session) {
+        setCurrentScreen('home')
+      } else {
+        // Fresh user starts at Splash
+        setCurrentScreen('splash')
+      }
     }
-  }, [fontsLoaded])
+  }, [fontsLoaded, authInitialized, session])
 
   // Navigation handlers
   const handleGetStarted = useCallback(() => {
+    setCurrentScreen('quiz')
+  }, [])
+
+  const handleQuizComplete = useCallback((data: any) => {
+    console.log('Quiz data:', data)
+    setHasCompletedQuiz(true)
     setCurrentScreen('home')
   }, [])
 
@@ -65,12 +111,12 @@ export default function App() {
   }, [])
 
   const handleScanProduct = useCallback(() => {
-    // For now, product scanning uses same camera
     setCurrentScreen('camera')
   }, [])
 
   const handleCapture = useCallback((uri: string) => {
     setLastImage(uri)
+    setScanCount(prev => prev + 1)
     // Simulate processing time
     setTimeout(() => {
       setCurrentScreen('result')
@@ -82,14 +128,32 @@ export default function App() {
   }, [])
 
   const handleShare = useCallback(() => {
-    console.log('Share result')
-  }, [])
+    if (!session) {
+      setCurrentScreen('auth')
+    } else {
+      console.log('Share result')
+    }
+  }, [session])
 
   const handleScanAgain = useCallback(() => {
-    setCurrentScreen('home')
+    // If it was the first scan and not logged in, maybe show auth
+    if (scanCount >= 1 && !session) {
+      setCurrentScreen('auth')
+    } else {
+      setCurrentScreen('home')
+    }
+  }, [scanCount, session])
+
+  const handleLogout = useCallback(async () => {
+    await supabase.auth.signOut()
+    setCurrentScreen('splash')
   }, [])
 
-  if (!fontsLoaded) {
+  const handleProfile = useCallback(() => {
+    setCurrentScreen('profile')
+  }, [])
+
+  if (!fontsLoaded || !authInitialized) {
     return <Loader fullScreen message="Loading KetoLens..." />
   }
 
@@ -99,11 +163,27 @@ export default function App() {
       case 'splash':
         return <SplashScreen onGetStarted={handleGetStarted} />
 
+      case 'quiz':
+        return <QuizScreen onComplete={handleQuizComplete} />
+
+      case 'auth':
+        return <AuthScreen />
+
       case 'home':
         return (
           <HomeScreen
             onScanMeal={handleScanMeal}
             onScanProduct={handleScanProduct}
+            onProfile={handleProfile}
+          />
+        )
+
+      case 'profile':
+        return (
+          <ProfileScreen
+            session={session}
+            onBack={handleBack}
+            onLogout={handleLogout}
           />
         )
 

@@ -2,7 +2,8 @@
  * Atoms Components Index
  */
 
-export { Button } from './Button'
-export { Text } from './Text'
-export { Badge } from './Badge'
-export { Loader } from './Loader'
+export * from './Button'
+export * from './Text'
+export * from './Badge'
+export * from './Loader'
+export * from './Input'

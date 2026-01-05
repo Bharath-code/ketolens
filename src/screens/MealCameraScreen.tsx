@@ -4,7 +4,8 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react'
-import { View, StyleSheet, TouchableOpacity, SafeAreaView, Dimensions } from 'react-native'
+import { View, StyleSheet, TouchableOpacity, Dimensions } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { CameraView, useCameraPermissions } from 'expo-camera'
 import { Navbar, Screen } from '../components/layout'
 import { Button, Text, Loader } from '../components/atoms'
@@ -74,17 +75,17 @@ export function MealCameraScreen({
                     ref={cameraRef}
                     style={styles.camera}
                     facing="back"
-                >
-                    {/* Focus Guide Overlay */}
-                    <View style={styles.overlay}>
-                        <View style={styles.focusGuide}>
-                            <View style={[styles.corner, styles.tl]} />
-                            <View style={[styles.corner, styles.tr]} />
-                            <View style={[styles.corner, styles.bl]} />
-                            <View style={[styles.corner, styles.br]} />
-                        </View>
+                />
+
+                {/* Focus Guide Overlay - Moved outside CameraView as it doesn't support children */}
+                <View style={styles.overlay} pointerEvents="none">
+                    <View style={styles.focusGuide}>
+                        <View style={[styles.corner, styles.tl]} />
+                        <View style={[styles.corner, styles.tr]} />
+                        <View style={[styles.corner, styles.bl]} />
+                        <View style={[styles.corner, styles.br]} />
                     </View>
-                </CameraView>
+                </View>
 
                 {/* Controls */}
                 <View style={styles.controls}>
@@ -124,7 +125,7 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     overlay: {
-        flex: 1,
+        ...StyleSheet.absoluteFillObject,
         backgroundColor: 'transparent',
         alignItems: 'center',
         justifyContent: 'center',
