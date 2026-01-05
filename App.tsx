@@ -25,6 +25,7 @@ import { supabase } from './src/services/supabase'
 import { analyzePhoto, AnalysisResult } from './src/services/aiService'
 import { ProductData } from './src/services/barcodeService'
 import { preprocessLabelImage } from './src/utils/imageUtils'
+import { ProfileService, UserProfile } from './src/services/profileService'
 import { View, StyleSheet } from 'react-native'
 import { AnimatePresence, MotiView } from 'moti'
 import { Colors } from './src/constants/theme'
@@ -44,6 +45,7 @@ const MOCK_RESULT = {
   },
   swapSuggestion: 'Great choice! This meal fits well within your keto goals.',
   foods: ['Mock Food'],
+  plateConfidence: 1.0,
 }
 
 type ScreenName = 'splash' | 'quiz' | 'auth' | 'home' | 'camera' | 'grocery-scanner' | 'result' | 'profile'
@@ -71,20 +73,58 @@ export default function App() {
     Poppins_800ExtraBold,
   })
 
-  // Handle Auth Session
+  // Handle Auth Session and Initial Profile Check
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    // 1. Initial Session Check
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSession(session)
+      if (session) {
+        // Sync guest data if it exists
+        const guestData = await ProfileService.getGuestData();
+        const profile = await ProfileService.getProfile(session.user.id)
+
+        if (guestData) {
+          await ProfileService.saveProfile({
+            id: session.user.id,
+            ...guestData.profileData,
+            ...guestData.targets,
+          } as UserProfile)
+          setHasCompletedQuiz(true)
+        } else {
+          setHasCompletedQuiz(!!profile)
+        }
+      }
       setAuthInitialized(true)
     })
 
+    // 2. Auth State Change Listener
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setSession(session)
       if (session) {
-        setCurrentScreen(prev => (prev === 'auth' ? 'home' : prev))
+        // Checking for guest data to sync
+        const guestData = await ProfileService.getGuestData();
+        if (guestData) {
+          await ProfileService.saveProfile({
+            id: session.user.id,
+            ...guestData.profileData,
+            ...guestData.targets,
+          } as UserProfile);
+          setHasCompletedQuiz(true);
+          setCurrentScreen('home');
+        } else {
+          const profile = await ProfileService.getProfile(session.user.id)
+          if (profile) {
+            setHasCompletedQuiz(true)
+            setCurrentScreen(prev => (prev === 'auth' || prev === 'splash' ? 'home' : prev))
+          } else {
+            setHasCompletedQuiz(false)
+            setCurrentScreen('quiz')
+          }
+        }
       } else {
+        setHasCompletedQuiz(false)
         setCurrentScreen('splash')
       }
     })
@@ -92,27 +132,65 @@ export default function App() {
     return () => subscription.unsubscribe()
   }, [])
 
+  // Hide Splash Screen when ready
   useEffect(() => {
     if (fontsLoaded && authInitialized) {
       SplashScreenNative.hideAsync()
       if (session) {
-        setCurrentScreen('home')
+        if (hasCompletedQuiz) {
+          setCurrentScreen('home')
+        } else {
+          setCurrentScreen('quiz')
+        }
       } else {
         setCurrentScreen('splash')
       }
     }
-  }, [fontsLoaded, authInitialized, session])
+  }, [fontsLoaded, authInitialized, session, hasCompletedQuiz])
 
   // Navigation handlers
   const handleGetStarted = useCallback(() => {
+    // Allow quiz first regardless of session
     setCurrentScreen('quiz')
   }, [])
 
-  const handleQuizComplete = useCallback((data: any) => {
-    console.log('Quiz data:', data)
-    setHasCompletedQuiz(true)
-    setCurrentScreen('home')
-  }, [])
+  const handleQuizComplete = useCallback(async (data: any) => {
+    console.log('Quiz data completed:', data)
+
+    const profileData = {
+      gender: data[1].toLowerCase() as any,
+      age: parseInt(data[2]),
+      weight: parseFloat(data[3].value),
+      weight_unit: data[3].unit,
+      height: parseFloat(data[4].value),
+      height_unit: data[4].unit,
+      activity_level: data[5].toLowerCase().replace(' ', '_') as any,
+      goal: data[6].toLowerCase().replace(' ', '_') as any,
+    }
+    const targets = ProfileService.calculateTargets(profileData)
+
+    if (session?.user?.id) {
+      try {
+        await ProfileService.saveProfile({
+          id: session.user.id,
+          ...profileData,
+          ...targets,
+        } as UserProfile)
+
+        setHasCompletedQuiz(true)
+        setCurrentScreen('home')
+      } catch (err) {
+        console.error('[App] Failed to save profile:', err)
+        setHasCompletedQuiz(true)
+        setCurrentScreen('home')
+      }
+    } else {
+      // Guest User: Save locally and go to Auth
+      await ProfileService.saveGuestData(profileData, targets);
+      setHasCompletedQuiz(true); // Temporarily to allow progression
+      setCurrentScreen('auth');
+    }
+  }, [session])
 
   const handleScanMeal = useCallback(() => {
     setCurrentScreen('camera')
@@ -129,13 +207,9 @@ export default function App() {
 
     try {
       setIsAnalyzing(true)
-
-      // 1. Preprocess the image
       const processed = await preprocessLabelImage(uri)
       setLastImage(processed.uri)
-
       if (processed.base64) {
-        // 2. Analyze the processed image
         const result = await analyzePhoto(processed.base64, 'meal')
         setAnalysisResult(result)
         setProductResult(null)
@@ -146,7 +220,7 @@ export default function App() {
     } catch (error) {
       console.error('Meal Analysis failed:', error)
       setLastImage(uri)
-      setAnalysisResult(MOCK_RESULT)
+      setAnalysisResult(MOCK_RESULT as any)
       setProductResult(null)
       setCurrentScreen('result')
     } finally {
@@ -169,9 +243,6 @@ export default function App() {
         console.log('[App] Metadata incomplete, triggering automatic OCR refinement from URL');
         try {
           const refinedResult = await analyzePhoto(imageUrl, 'product', true);
-
-          // Update product data with refined results
-          // This will automatically propagate to ResultScreen via props
           setProductResult(prev => {
             if (!prev || prev.barcode !== product.barcode) return prev;
             return {
@@ -193,16 +264,11 @@ export default function App() {
 
   const handleProductCapture = useCallback(async (uri: string, _type: 'barcode' | 'ingredients', _data?: string, _base64?: string) => {
     setScanCount(prev => prev + 1)
-
     try {
       setIsAnalyzing(true)
-
-      // 1. Preprocess the image
       const processed = await preprocessLabelImage(uri)
       setLastImage(processed.uri)
-
       if (processed.base64) {
-        // 2. Analyze the processed product image
         const result = await analyzePhoto(processed.base64, 'product')
         setAnalysisResult(result)
         setCurrentScreen('result')
@@ -212,7 +278,7 @@ export default function App() {
     } catch (error) {
       console.error('Product Analysis failed:', error)
       setLastImage(uri)
-      setAnalysisResult(MOCK_RESULT)
+      setAnalysisResult(MOCK_RESULT as any)
       setCurrentScreen('result')
     } finally {
       setIsAnalyzing(false)
@@ -241,9 +307,9 @@ export default function App() {
 
   const handleLogout = useCallback(async () => {
     await supabase.auth.signOut()
+    setHasCompletedQuiz(false)
     setCurrentScreen('splash')
   }, [])
-
 
   const handleTabChange = useCallback((tab: 'home' | 'scan' | 'profile') => {
     if (tab === 'home') setCurrentScreen('home')
@@ -312,7 +378,6 @@ export default function App() {
             onScanAgain={handleScanAgain}
           />
         )
-
       default:
         return <SplashScreen onGetStarted={handleGetStarted} />
     }

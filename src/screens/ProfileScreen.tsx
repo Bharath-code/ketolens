@@ -6,9 +6,10 @@
 import React, { useCallback } from 'react'
 import { View, StyleSheet, TouchableOpacity, ScrollView } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { Text, Button } from '../components/atoms'
-import { Colors, Spacing, BorderRadius, Shadows } from '../constants/theme'
+import { Text, Button, Loader } from '../components/atoms'
+import { Colors, Spacing, BorderRadius, Shadows, FontSize } from '../constants/theme'
 import { supabase } from '../services/supabase'
+import { ProfileService, UserProfile } from '../services/profileService'
 
 interface ProfileScreenProps {
     session: any
@@ -16,7 +17,23 @@ interface ProfileScreenProps {
 }
 
 export function ProfileScreen({ session, onLogout }: ProfileScreenProps) {
+    const [profile, setProfile] = React.useState<UserProfile | null>(null)
+    const [loading, setLoading] = React.useState(true)
+
+    React.useEffect(() => {
+        if (session?.user?.id) {
+            ProfileService.getProfile(session.user.id).then(data => {
+                setProfile(data)
+                setLoading(false)
+            })
+        }
+    }, [session])
+
     const userEmail = session?.user?.email || 'User'
+
+    if (loading) {
+        return <Loader fullScreen message="Loading profile..." />
+    }
 
     return (
         <SafeAreaView style={styles.container}>
@@ -41,16 +58,48 @@ export function ProfileScreen({ session, onLogout }: ProfileScreenProps) {
 
                 <View style={styles.section}>
                     <Text variant="heading" size="lg" style={styles.sectionTitle}>
-                        Account Settings
+                        Keto Targets
                     </Text>
-                    <TouchableOpacity style={styles.menuItem}>
-                        <Text variant="body">Edit Profile</Text>
-                        <Text variant="body" color={Colors.gray400}>→</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.menuItem}>
-                        <Text variant="body">Subscription</Text>
-                        <Text variant="body" color={Colors.ketoSafe} weight="bold">Free</Text>
-                    </TouchableOpacity>
+                    <View style={styles.targetGrid}>
+                        <View style={styles.targetCard}>
+                            <Text variant="caption" color={Colors.gray500} weight="bold">CALORIES</Text>
+                            <Text variant="heading" size="xl" color={Colors.ketoSafe}>
+                                {profile?.calorie_target || 2000}
+                            </Text>
+                            <Text variant="caption" color={Colors.gray400}>kcal / day</Text>
+                        </View>
+                        <View style={[styles.targetCard, { borderLeftWidth: 1, borderLeftColor: Colors.gray100 }]}>
+                            <Text variant="caption" color={Colors.gray500} weight="bold">NET CARBS</Text>
+                            <Text variant="heading" size="xl" color={Colors.ketoSafe}>
+                                {profile?.carb_limit || 50}g
+                            </Text>
+                            <Text variant="caption" color={Colors.gray400}>daily limit</Text>
+                        </View>
+                    </View>
+                </View>
+
+                <View style={styles.section}>
+                    <Text variant="heading" size="lg" style={styles.sectionTitle}>
+                        Body Metrics
+                    </Text>
+                    <View style={styles.metricsList}>
+                        <View style={styles.metricItem}>
+                            <Text variant="body" color={Colors.gray600}>Age</Text>
+                            <Text variant="body" weight="bold">{profile?.age || '--'} years</Text>
+                        </View>
+                        <View style={styles.metricItem}>
+                            <Text variant="body" color={Colors.gray600}>Weight</Text>
+                            <Text variant="body" weight="bold">
+                                {profile?.weight || '--'} {profile?.weight_unit}
+                            </Text>
+                        </View>
+                        <View style={styles.metricItem}>
+                            <Text variant="body" color={Colors.gray600}>Height</Text>
+                            <Text variant="body" weight="bold">
+                                {profile?.height || '--'} {profile?.height_unit}
+                            </Text>
+                        </View>
+                    </View>
                 </View>
 
                 <View style={styles.section}>
@@ -58,12 +107,16 @@ export function ProfileScreen({ session, onLogout }: ProfileScreenProps) {
                         App Preferences
                     </Text>
                     <TouchableOpacity style={styles.menuItem}>
-                        <Text variant="body">Daily Carb Goal</Text>
-                        <Text variant="body" color={Colors.gray400}>20g</Text>
+                        <Text variant="body">Measurement Units</Text>
+                        <Text variant="body" color={Colors.gray400}>
+                            {profile?.weight_unit === 'kg' ? 'Metric' : 'Imperial'}
+                        </Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.menuItem}>
-                        <Text variant="body">Notifications</Text>
-                        <Text variant="body" color={Colors.gray400}>→</Text>
+                        <Text variant="body">Activity Level</Text>
+                        <Text variant="body" color={Colors.gray400}>
+                            {profile?.activity_level?.replace('_', ' ') || 'Sedentary'}
+                        </Text>
                     </TouchableOpacity>
                 </View>
 
@@ -140,5 +193,33 @@ const styles = StyleSheet.create({
     logoutBtn: {
         marginTop: Spacing.xl,
         borderColor: Colors.ketoAvoid,
+    },
+    targetGrid: {
+        flexDirection: 'row',
+        backgroundColor: Colors.gray50,
+        borderRadius: BorderRadius.xl,
+        padding: Spacing.lg,
+        borderWidth: 1,
+        borderColor: Colors.gray100,
+    },
+    targetCard: {
+        flex: 1,
+        alignItems: 'center',
+        paddingVertical: Spacing.sm,
+    },
+    metricsList: {
+        backgroundColor: Colors.white,
+        borderRadius: BorderRadius.xl,
+        borderWidth: 1,
+        borderColor: Colors.gray100,
+        overflow: 'hidden',
+    },
+    metricItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: Spacing.lg,
+        borderBottomWidth: 1,
+        borderBottomColor: Colors.gray50,
     },
 })
