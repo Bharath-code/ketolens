@@ -12,19 +12,16 @@ import { supabase } from '../services/supabase'
 
 interface ProfileScreenProps {
     session: any
-    onBack: () => void
     onLogout: () => void
 }
 
-export function ProfileScreen({ session, onBack, onLogout }: ProfileScreenProps) {
+export function ProfileScreen({ session, onLogout }: ProfileScreenProps) {
     const userEmail = session?.user?.email || 'User'
 
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
-                <TouchableOpacity onPress={onBack} style={styles.backButton}>
-                    <Text variant="body" size="2xl">←</Text>
-                </TouchableOpacity>
+                <View style={styles.placeholder} />
                 <Text variant="heading" size="xl">Profile</Text>
                 <View style={styles.placeholder} />
             </View>

@@ -19,7 +19,9 @@ import {
   ProfileScreen
 } from './src/screens'
 import { Loader } from './src/components/atoms'
+import { TabBar } from './src/components/layout'
 import { supabase } from './src/services/supabase'
+import { View, StyleSheet } from 'react-native'
 
 // Keep the splash screen visible while we fetch resources
 SplashScreenNative.preventAutoHideAsync()
@@ -149,8 +151,11 @@ export default function App() {
     setCurrentScreen('splash')
   }, [])
 
-  const handleProfile = useCallback(() => {
-    setCurrentScreen('profile')
+
+  const handleTabChange = useCallback((tab: 'home' | 'scan' | 'profile') => {
+    if (tab === 'home') setCurrentScreen('home')
+    else if (tab === 'scan') setCurrentScreen('camera')
+    else if (tab === 'profile') setCurrentScreen('profile')
   }, [])
 
   if (!fontsLoaded || !authInitialized) {
@@ -174,7 +179,6 @@ export default function App() {
           <HomeScreen
             onScanMeal={handleScanMeal}
             onScanProduct={handleScanProduct}
-            onProfile={handleProfile}
           />
         )
 
@@ -182,7 +186,6 @@ export default function App() {
         return (
           <ProfileScreen
             session={session}
-            onBack={handleBack}
             onLogout={handleLogout}
           />
         )
@@ -214,10 +217,29 @@ export default function App() {
     }
   }
 
+  const showTabBar = ['home', 'profile', 'result'].includes(currentScreen)
+  const activeTab = currentScreen === 'profile' ? 'profile' : 'home'
+
   return (
     <SafeAreaProvider>
       <StatusBar style="dark" />
-      {renderScreen()}
+      <View style={styles.container}>
+        <View style={styles.content}>
+          {renderScreen()}
+        </View>
+        {showTabBar && (
+          <TabBar activeTab={activeTab} onTabChange={handleTabChange} />
+        )}
+      </View>
     </SafeAreaProvider>
   )
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  content: {
+    flex: 1,
+  },
+})

@@ -14,7 +14,6 @@ interface HomeScreenProps {
     scansRemaining?: number
     onScanMeal: () => void
     onScanProduct: () => void
-    onProfile: () => void
 }
 
 export function HomeScreen({
@@ -22,7 +21,6 @@ export function HomeScreen({
     scansRemaining = 5,
     onScanMeal,
     onScanProduct,
-    onProfile,
 }: HomeScreenProps) {
     return (
         <SafeAreaView style={styles.container}>
@@ -34,9 +32,6 @@ export function HomeScreen({
                             <Text variant="heading" size="2xl">
                                 {userName} 👋
                             </Text>
-                            <TouchableOpacity onPress={onProfile} style={styles.profileBtn}>
-                                <Text variant="body" size="lg">👤</Text>
-                            </TouchableOpacity>
                         </View>
                         <Text variant="body" size="base" color={Colors.gray500}>
                             Ready to stay in ketosis?
