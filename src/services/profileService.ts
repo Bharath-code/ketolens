@@ -59,17 +59,23 @@ export const ProfileService = {
     },
 
     async getProfile(userId: string): Promise<UserProfile | null> {
+        // Use limit(1) instead of maybeSingle() to handle RLS/PostgREST weirdness 
+        // that leads to PGRST116 even when rows are 0.
         const { data, error } = await supabase
             .from('user_profiles')
             .select('*')
             .eq('id', userId)
-            .maybeSingle();
+            .limit(1);
 
         if (error) {
-            console.error('[ProfileService] Error fetching profile:', error);
+            // Only log actual errors, not "no rows found"
+            if (error.code !== 'PGRST116') {
+                console.error('[ProfileService] Error fetching profile:', error);
+            }
             return null;
         }
-        return data as UserProfile;
+
+        return (data && data.length > 0) ? (data[0] as UserProfile) : null;
     },
 
     async saveProfile(profile: UserProfile): Promise<boolean> {

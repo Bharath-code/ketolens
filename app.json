@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "ketolens-expo",
-    "slug": "ketolens-expo",
+    "slug": "ketolens",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -21,7 +21,8 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.anonymous.ketolensexpo"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -29,6 +30,13 @@
     "plugins": [
       "expo-router",
       "expo-font"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "9a3bbc78-8498-484b-ac70-6371702af2b7"
+      }
+    },
+    "owner": "bharathstrikes-organization"
   }
 }

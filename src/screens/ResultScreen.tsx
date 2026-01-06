@@ -18,7 +18,8 @@ import { haptics } from '../services/hapticsService'
 import { logCorrection } from '../services/logService'
 import { ShadowDbService } from '../services/shadowDbService'
 import { shareResult } from '../services/shareService'
-import { AlertTriangle, Share2 } from 'lucide-react-native'
+import { AnalyticsService, EVENTS } from '../services/analyticsService'
+import { AlertTriangle, Share2, Flame } from 'lucide-react-native'
 
 interface ResultScreenProps {
     score: number
@@ -69,6 +70,9 @@ export function ResultScreen(props: ResultScreenProps) {
     const title = scanType === 'meal' ? 'Meal Analysis' : 'Product Analysis'
     const isHighScore = currentScore >= 80
 
+    const offenders = foods.filter(f => f.is_keto_offender)
+    const hasOffenders = offenders.length > 0
+
     // Show "Tap to review" when plate confidence is low or any high-carb item has low confidence
     const shouldShowReviewPrompt = plateConfidence < 0.65 ||
         foods.some(f => f.carb_risk !== 'low' && f.confidence < 0.8)
@@ -112,6 +116,12 @@ export function ResultScreen(props: ResultScreenProps) {
         if (newScore >= 75 && currentVerdict === 'borderline') {
             setCurrentVerdict('safe')
         }
+
+        AnalyticsService.track('corrections_made', {
+            scanId,
+            correctionCount: corrections.length,
+            userId
+        })
     }, [foods, scanId, currentScore, currentVerdict, onRecalculate])
 
     const handleShare = useCallback(async () => {
@@ -125,6 +135,7 @@ export function ResultScreen(props: ResultScreenProps) {
                 userId,
                 productName,
             })
+            AnalyticsService.track(EVENTS.SHARE_CLICKED, { userId, verdict: currentVerdict })
         } catch (error) {
             console.error('Share failed:', error)
         } finally {
@@ -207,6 +218,30 @@ export function ResultScreen(props: ResultScreenProps) {
                         </Text>
                         <Text variant="body" size="base">
                             {swapSuggestion}
+                        </Text>
+                    </AnimatedView>
+                )}
+
+                {/* Keto Offenders Section */}
+                {hasOffenders && (
+                    <AnimatedView animation="slideUp" delay={1100} style={styles.offendersSection}>
+                        <View style={styles.offendersHeader}>
+                            <Flame size={20} color={Colors.ketoAvoid} />
+                            <Text variant="heading" size="base" color={Colors.ketoAvoid}>
+                                Keto Offenders Detected
+                            </Text>
+                        </View>
+                        <View style={styles.offendersList}>
+                            {offenders.map((offender, index) => (
+                                <View key={index} style={styles.offenderBadge}>
+                                    <Text variant="body" size="xs" color={Colors.ketoAvoid} weight="bold">
+                                        {offender.name.toUpperCase()}
+                                    </Text>
+                                </View>
+                            ))}
+                        </View>
+                        <Text variant="caption" color={Colors.gray500} style={{ marginTop: Spacing.sm }}>
+                            These ingredients are high in carbs or highly inflammatory.
                         </Text>
                     </AnimatedView>
                 )}
@@ -331,6 +366,33 @@ const styles = StyleSheet.create({
         gap: Spacing.md,
         borderTopWidth: 1,
         borderTopColor: Colors.gray100,
+    },
+    offendersSection: {
+        padding: Spacing.xl,
+        backgroundColor: Colors.ketoAvoidDim,
+        borderRadius: BorderRadius.xl,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 71, 87, 0.2)',
+        marginBottom: Spacing['2xl'],
+    },
+    offendersHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: Spacing.sm,
+        marginBottom: Spacing.md,
+    },
+    offendersList: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: Spacing.sm,
+    },
+    offenderBadge: {
+        paddingHorizontal: Spacing.sm,
+        paddingVertical: 4,
+        backgroundColor: 'rgba(255, 71, 87, 0.1)',
+        borderRadius: BorderRadius.sm,
+        borderWidth: 1,
+        borderColor: Colors.ketoAvoid,
     },
     button: {
         marginBottom: Spacing.sm,

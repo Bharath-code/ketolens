@@ -17,15 +17,22 @@ import {
   AuthScreen,
   QuizScreen,
   ProfileScreen,
-  GroceryScannerScreen
+  GroceryScannerScreen,
+  PaywallScreen,
+  HistoryScreen,
+  type HistoryItem
 } from './src/screens'
 import { Loader } from './src/components/atoms'
 import { TabBar } from './src/components/layout'
+import * as RNIap from 'react-native-iap'
 import { supabase } from './src/services/supabase'
 import { analyzePhoto, AnalysisResult } from './src/services/aiService'
 import { ProductData } from './src/services/barcodeService'
+import { QuotaService } from './src/services/quotaService'
 import { preprocessLabelImage } from './src/utils/imageUtils'
 import { ProfileService, UserProfile } from './src/services/profileService'
+import { AnalyticsService, EVENTS } from './src/services/analyticsService'
+import { NotificationService } from './src/services/notificationService'
 import { View, StyleSheet } from 'react-native'
 import { AnimatePresence, MotiView } from 'moti'
 import { Colors } from './src/constants/theme'
@@ -48,7 +55,7 @@ const MOCK_RESULT = {
   plateConfidence: 1.0,
 }
 
-type ScreenName = 'splash' | 'quiz' | 'auth' | 'home' | 'camera' | 'grocery-scanner' | 'result' | 'profile'
+type ScreenName = 'splash' | 'quiz' | 'auth' | 'home' | 'camera' | 'grocery-scanner' | 'result' | 'profile' | 'paywall' | 'history'
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<ScreenName>('splash')
@@ -61,6 +68,13 @@ export default function App() {
   const [productResult, setProductResult] = useState<ProductData | null>(null)
   const [scanType, setScanType] = useState<'meal' | 'product'>('meal')
   const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [quotaStatus, setQuotaStatus] = useState({ canScan: true, remaining: 5, total: 5, isPro: false })
+
+  // Refresh quota
+  const refreshQuota = useCallback(async () => {
+    const status = await QuotaService.getQuotaStatus(session?.user?.id)
+    setQuotaStatus(status)
+  }, [session])
 
   // Load fonts
   const [fontsLoaded] = useFonts({
@@ -132,6 +146,25 @@ export default function App() {
     return () => subscription.unsubscribe()
   }, [])
 
+  // Initialize Analytics and Notifications
+  useEffect(() => {
+    AnalyticsService.init()
+
+    // Setup Notifications
+    NotificationService.registerForPushNotificationsAsync()
+    NotificationService.scheduleDailyReminder(12, 0) // Default 12 PM lunch reminder
+  }, [])
+
+  // Identify user on session change
+  useEffect(() => {
+    if (session?.user?.id) {
+      AnalyticsService.identify(session.user.id, {
+        email: session.user.email,
+        is_pro: quotaStatus.isPro,
+      })
+    }
+  }, [session, quotaStatus.isPro])
+
   // Hide Splash Screen when ready
   useEffect(() => {
     if (fontsLoaded && authInitialized) {
@@ -147,6 +180,14 @@ export default function App() {
       }
     }
   }, [fontsLoaded, authInitialized, session, hasCompletedQuiz])
+
+  // Sync quota on session change or screen change
+  useEffect(() => {
+    if (authInitialized) {
+      refreshQuota()
+      AnalyticsService.screen(currentScreen)
+    }
+  }, [authInitialized, session, currentScreen])
 
   // Navigation handlers
   const handleGetStarted = useCallback(() => {
@@ -177,6 +218,7 @@ export default function App() {
           ...targets,
         } as UserProfile)
 
+        AnalyticsService.track(EVENTS.ONBOARDING_COMPLETED, { method: 'signed_in' })
         setHasCompletedQuiz(true)
         setCurrentScreen('home')
       } catch (err) {
@@ -187,38 +229,58 @@ export default function App() {
     } else {
       // Guest User: Save locally and go to Auth
       await ProfileService.saveGuestData(profileData, targets);
+      AnalyticsService.track(EVENTS.QUIZ_COMPLETED, { method: 'guest' })
       setHasCompletedQuiz(true); // Temporarily to allow progression
       setCurrentScreen('auth');
     }
   }, [session])
 
-  const handleScanMeal = useCallback(() => {
-    setCurrentScreen('camera')
-  }, [])
+  const handleScanMeal = useCallback(async () => {
+    const { canScan } = await QuotaService.getQuotaStatus(session?.user?.id)
+    if (!canScan) {
+      setCurrentScreen('paywall')
+    } else {
+      setCurrentScreen('camera')
+    }
+  }, [session])
 
-  const handleScanProduct = useCallback(() => {
-    setCurrentScreen('grocery-scanner')
-  }, [])
+  const handleScanProduct = useCallback(async () => {
+    const { canScan } = await QuotaService.getQuotaStatus(session?.user?.id)
+    if (!canScan) {
+      setCurrentScreen('paywall')
+    } else {
+      setCurrentScreen('grocery-scanner')
+    }
+  }, [session])
 
   // AI-powered meal capture handler
   const handleMealCapture = useCallback(async (uri: string, _base64?: string) => {
+    await QuotaService.incrementScanCount(session?.user?.id)
+    await refreshQuota()
     setScanCount(prev => prev + 1)
     setScanType('meal')
 
     try {
       setIsAnalyzing(true)
+      AnalyticsService.track(EVENTS.SCAN_STARTED, { type: 'meal' })
       const processed = await preprocessLabelImage(uri)
       setLastImage(processed.uri)
       if (processed.base64) {
         const result = await analyzePhoto(processed.base64, 'meal')
+        AnalyticsService.track(EVENTS.SCAN_COMPLETED, {
+          type: 'meal',
+          score: result.score,
+          verdict: result.verdict
+        })
         setAnalysisResult(result)
         setProductResult(null)
         setCurrentScreen('result')
       } else {
         throw new Error('Preprocessing failed to produce base64')
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Meal Analysis failed:', error)
+      AnalyticsService.track(EVENTS.SCAN_FAILED, { type: 'meal', error: error.message })
       setLastImage(uri)
       setAnalysisResult(MOCK_RESULT as any)
       setProductResult(null)
@@ -230,6 +292,8 @@ export default function App() {
 
   // Barcode-based product lookup handler (No AI, database only)
   const handleProductScanned = useCallback(async (product: ProductData) => {
+    await QuotaService.incrementScanCount(session?.user?.id)
+    await refreshQuota()
     setScanCount(prev => prev + 1)
     setScanType('product')
     setProductResult(product)
@@ -311,10 +375,24 @@ export default function App() {
     setCurrentScreen('splash')
   }, [])
 
-  const handleTabChange = useCallback((tab: 'home' | 'scan' | 'profile') => {
+  const handleTabChange = useCallback((tab: 'home' | 'scan' | 'history' | 'profile') => {
     if (tab === 'home') setCurrentScreen('home')
     else if (tab === 'scan') setCurrentScreen('camera')
+    else if (tab === 'history') setCurrentScreen('history')
     else if (tab === 'profile') setCurrentScreen('profile')
+  }, [])
+
+  // Initialize IAP Connection
+  useEffect(() => {
+    RNIap.initConnection().then((result) => {
+      console.log('[IAP] Connection initialized:', result)
+    }).catch((err) => {
+      console.warn('[IAP] Connection failed:', err)
+    })
+
+    return () => {
+      RNIap.endConnection()
+    }
   }, [])
 
   if (!fontsLoaded || !authInitialized) {
@@ -337,8 +415,12 @@ export default function App() {
       case 'home':
         return (
           <HomeScreen
+            userName={session?.user?.email?.split('@')[0] || 'Keto Warrior'}
+            scansRemaining={quotaStatus.remaining}
+            isPro={quotaStatus.isPro}
             onScanMeal={handleScanMeal}
             onScanProduct={handleScanProduct}
+            onViewHistory={() => setCurrentScreen('history')}
           />
         )
       case 'profile':
@@ -378,13 +460,35 @@ export default function App() {
             onScanAgain={handleScanAgain}
           />
         )
+      case 'paywall':
+        return (
+          <PaywallScreen
+            userId={session?.user?.id}
+            userEmail={session?.user?.email}
+            onBack={handleBack}
+            onSuccess={() => {
+              setCurrentScreen('home')
+              // Optionally show a "Success" toast here
+            }}
+          />
+        )
+      case 'history':
+        return (
+          <HistoryScreen
+            userId={session?.user?.id || ''}
+            onItemPress={(item: HistoryItem) => {
+              // For now, just log. In future, we could navigate back to ResultScreen with this item's data
+              console.log('History item pressed:', item)
+            }}
+          />
+        )
       default:
         return <SplashScreen onGetStarted={handleGetStarted} />
     }
   }
 
-  const showTabBar = ['home', 'profile', 'result'].includes(currentScreen)
-  const activeTab = currentScreen === 'profile' ? 'profile' : 'home'
+  const showTabBar = ['home', 'profile', 'result', 'history'].includes(currentScreen)
+  const activeTab = currentScreen === 'profile' ? 'profile' : currentScreen === 'history' ? 'history' : 'home'
 
   return (
     <SafeAreaProvider>

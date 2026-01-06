@@ -99,6 +99,7 @@ export function getVerdictLabel(verdict: KetoVerdict): string {
         case 'safe': return 'KETO-SAFE'
         case 'borderline': return 'BORDERLINE'
         case 'avoid': return 'AVOID'
+        case 'unknown': return 'UNKNOWN'
     }
 }
 
@@ -107,5 +108,6 @@ export function getVerdictEmoji(verdict: KetoVerdict): string {
         case 'safe': return '✓'
         case 'borderline': return '⚠'
         case 'avoid': return '✕'
+        case 'unknown': return '?'
     }
 }

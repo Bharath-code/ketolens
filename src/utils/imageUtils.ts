@@ -54,6 +54,7 @@ export async function preprocessRemoteImage(url: string): Promise<string | null>
         const targetWidth = Math.round(width * scale);
         const targetHeight = Math.round(height * scale);
 
+        // @ts-ignore - Version mismatch in Skia Surface API
         const surface = Skia.Surface.MakeRaster(targetWidth, targetHeight);
         if (!surface) throw new Error('Failed to create Skia surface');
 
@@ -84,7 +85,8 @@ export async function preprocessRemoteImage(url: string): Promise<string | null>
             -1, 5, -1,
             0, -1, 0
         ];
-        const sharpenFilter = Skia.ImageFilter.MakeMatrixPreprocess ? null : Skia.ImageFilter.MakeMatrixConvolution(
+        // @ts-ignore - Version mismatch in Skia Convolution API
+        const sharpenFilter = Skia.ImageFilter.MakeMatrixConvolution(
             { width: 3, height: 3 },
             kernel,
             1, // gain

@@ -3,6 +3,8 @@
  * Design tokens for React Native StyleSheet
  */
 
+import type { KetoVerdict } from '../types'
+
 export const Colors = {
     // Keto Status Colors
     ketoSafe: '#10B981',
@@ -114,10 +116,11 @@ export const Shadows = {
     },
 } as const
 
-export function getVerdictColor(verdict: 'safe' | 'borderline' | 'avoid'): string {
+export function getVerdictColor(verdict: KetoVerdict): string {
     switch (verdict) {
         case 'safe': return Colors.ketoSafe
         case 'borderline': return Colors.ketoBorderline
         case 'avoid': return Colors.ketoAvoid
+        case 'unknown': return Colors.gray500
     }
 }

@@ -5,11 +5,11 @@ import { Colors, Spacing, Shadows, BorderRadius } from '../../constants/theme'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { MotiView } from 'moti'
 import { haptics } from '../../services/hapticsService'
-import { Home, Camera, User } from 'lucide-react-native'
+import { Home, Camera, User, ClipboardList } from 'lucide-react-native'
 
 interface TabBarProps {
-    activeTab: 'home' | 'scan' | 'profile'
-    onTabChange: (tab: 'home' | 'scan' | 'profile') => void
+    activeTab: 'home' | 'scan' | 'history' | 'profile'
+    onTabChange: (tab: 'home' | 'scan' | 'history' | 'profile') => void
 }
 
 export function TabBar({ activeTab, onTabChange }: TabBarProps) {
@@ -28,6 +28,12 @@ export function TabBar({ activeTab, onTabChange }: TabBarProps) {
                 label="Scan"
                 active={activeTab === 'scan'}
                 onPress={() => onTabChange('scan')}
+            />
+            <TabItem
+                Icon={ClipboardList}
+                label="History"
+                active={activeTab === 'history'}
+                onPress={() => onTabChange('history')}
             />
             <TabItem
                 Icon={User}
