@@ -59,6 +59,9 @@ export const ProfileService = {
     },
 
     async getProfile(userId: string): Promise<UserProfile | null> {
+        // Guard: prevent Supabase UUID error on empty string
+        if (!userId) return null;
+
         // Use limit(1) instead of maybeSingle() to handle RLS/PostgREST weirdness 
         // that leads to PGRST116 even when rows are 0.
         const { data, error } = await supabase
@@ -79,6 +82,9 @@ export const ProfileService = {
     },
 
     async saveProfile(profile: UserProfile): Promise<boolean> {
+        // Guard: prevent Supabase UUID error on empty id
+        if (!profile.id) return false;
+
         const { error } = await supabase
             .from('user_profiles')
             .upsert(profile);

@@ -21,13 +21,26 @@ export function ProfileScreen({ session, onLogout }: ProfileScreenProps) {
     const [loading, setLoading] = React.useState(true)
 
     React.useEffect(() => {
-        if (session?.user?.id) {
-            ProfileService.getProfile(session.user.id).then(data => {
-                setProfile(data)
-                setLoading(false)
-            })
-        }
-    }, [session])
+        const loadProfile = async () => {
+            if (session?.user?.id) {
+                // Logged in user: fetch from Supabase
+                const data = await ProfileService.getProfile(session.user.id);
+                setProfile(data);
+            } else {
+                // Guest user: try to load from local storage
+                const guestData = await ProfileService.getGuestData();
+                if (guestData) {
+                    setProfile({
+                        id: 'guest',
+                        ...guestData.profileData,
+                        ...guestData.targets,
+                    } as UserProfile);
+                }
+            }
+            setLoading(false);
+        };
+        loadProfile();
+    }, [session]);
 
     const userEmail = session?.user?.email || 'User'
 
