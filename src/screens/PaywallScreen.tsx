@@ -1,15 +1,12 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from 'react-native';
-import { Navbar, Screen } from '../components/layout';
-import { Text, Button, Loader } from '../components/atoms';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Linking } from 'react-native';
+import { Screen } from '../components/layout';
+import { Text, Button } from '../components/atoms';
 import { Colors, Spacing, BorderRadius } from '../constants/theme';
-import { MotiView, AnimatePresence } from 'moti';
-import { Crown, Check, Zap, Flame, ShieldCheck, X } from 'lucide-react-native';
-import { useIAP, type Purchase, type Subscription, ErrorCode } from 'react-native-iap';
-import { supabase } from '../services/supabase';
+import { MotiView } from 'moti';
+import { Crown, Zap, Flame, ShieldCheck, X } from 'lucide-react-native';
 import { haptics } from '../services/hapticsService';
 import { AnalyticsService, EVENTS } from '../services/analyticsService';
-import { useEffect } from 'react';
 
 interface PaywallScreenProps {
     onBack: () => void;
@@ -27,132 +24,43 @@ const PRO_FEATURES = [
     { title: 'Personalized Macro Coaching', description: 'Dynamic targets based on your progress', icon: Crown },
 ];
 
-const SUB_SKUS = ['mealmind_premium_monthly'];
-
+/**
+ * Simplified PaywallScreen without native IAP.
+ * 
+ * Since KetoLens qualifies for Play Store payment exemptions (digital goods/SaaS),
+ * IAP has been removed. This screen now serves as a marketing/upgrade prompt.
+ * 
+ * For production monetization, consider:
+ * - Stripe web checkout (via WebView or external link)
+ * - RevenueCat SDK (if IAP is later required)
+ * - Server-side subscription management
+ */
 export function PaywallScreen({ onBack, onSuccess, userId, userEmail }: PaywallScreenProps) {
-    const {
-        connected,
-        subscriptions,
-        getSubscriptions,
-        requestSubscription,
-        finishTransaction,
-        currentPurchase,
-        currentPurchaseError,
-    } = useIAP() as any;
-
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-
-    // 1. Fetch products when connected
-    useEffect(() => {
-        if (connected) {
-            getSubscriptions({ skus: SUB_SKUS });
-        }
-    }, [connected]);
 
     useEffect(() => {
         AnalyticsService.track(EVENTS.PAYWALL_VIEWED, { userId });
     }, []);
 
-    // 2. Listen for purchase success
-    useEffect(() => {
-        const checkPurchase = async () => {
-            if (currentPurchase) {
-                const receipt = currentPurchase.transactionReceipt;
-                if (receipt) {
-                    try {
-                        setLoading(true);
-                        // Verify with backend
-                        const { error: verifyError } = await supabase.functions.invoke('verify-purchase', {
-                            body: {
-                                receipt,
-                                platform: currentPurchase.productId.includes('ios') ? 'ios' : 'android',
-                                userId
-                            },
-                        });
-
-                        if (verifyError) throw verifyError;
-
-                        await finishTransaction({ purchase: currentPurchase, isConsumable: false });
-                        AnalyticsService.track(EVENTS.PURCHASE_COMPLETED, {
-                            productId: currentPurchase.productId,
-                            userId
-                        });
-                        haptics.success();
-                        onSuccess();
-                    } catch (err: any) {
-                        console.error('[IAP] Verification failed:', err);
-                        AnalyticsService.track(EVENTS.PURCHASE_FAILED, { error: err.message, userId });
-                        setError('Verification failed. Please try "Restore Purchases".');
-                    } finally {
-                        setLoading(false);
-                    }
-                }
-            }
-        };
-        checkPurchase();
-    }, [currentPurchase]);
-
-    // 3. Listen for errors
-    useEffect(() => {
-        if (currentPurchaseError) {
-            console.warn('[IAP] Purchase error:', currentPurchaseError);
-            setLoading(false);
-            if (currentPurchaseError.code !== ErrorCode.UserCancelled && (currentPurchaseError.code as any) !== 'E_USER_CANCELLED') {
-                setError(currentPurchaseError.message);
-            }
-        }
-    }, [currentPurchaseError]);
-
     const handleUpgrade = async () => {
-        if (!userId) {
-            setError('Please sign in to upgrade');
-            return;
-        }
-
-        setLoading(true);
-        setError(null);
         haptics.medium();
+        setLoading(true);
 
-        try {
-            AnalyticsService.track(EVENTS.PURCHASE_STARTED, { sku: SUB_SKUS[0], userId });
-            await requestSubscription({ sku: SUB_SKUS[0] });
-        } catch (err: any) {
-            console.error('[Paywall] Request Subscription Error:', err);
-            setError(err.message);
+        AnalyticsService.track(EVENTS.PURCHASE_STARTED, { userId });
+
+        // TODO: Replace with your payment flow (e.g., Stripe checkout URL)
+        // For now, simulate a coming soon state
+        setTimeout(() => {
             setLoading(false);
-        }
+            // Show coming soon message or open external payment link
+            // Linking.openURL('https://your-stripe-checkout-url.com');
+        }, 1000);
     };
 
     const handleRestore = async () => {
-        // Implementation remains similar but uses direct call for simplicity
-        // in a production app, useIAP might have more helpers
-        setLoading(true);
-        setError(null);
-        try {
-            // Re-fetch available purchases
-            // Note: In some versions of useIAP, you'd call a helper, but RNIap.getAvailablePurchases is still valid
-            const { getAvailablePurchases } = require('react-native-iap');
-            const purchases = await getAvailablePurchases();
-            if (purchases && purchases.length > 0) {
-                const lastPurchase = purchases[purchases.length - 1];
-                const { error: verifyError } = await supabase.functions.invoke('verify-purchase', {
-                    body: { receipt: lastPurchase.transactionReceipt, userId },
-                });
-                if (!verifyError) {
-                    haptics.success();
-                    onSuccess();
-                } else {
-                    throw verifyError;
-                }
-            } else {
-                setError('No previous purchases found.');
-            }
-        } catch (err: any) {
-            setError('Restore failed: ' + err.message);
-        } finally {
-            setLoading(false);
-        }
+        haptics.light();
+        // TODO: Implement restore via your backend subscription check
+        // For now, this is a placeholder
     };
 
     return (
@@ -211,28 +119,26 @@ export function PaywallScreen({ onBack, onSuccess, userId, userEmail }: PaywallS
                         ))}
                     </View>
 
-                    {error && (
-                        <MotiView from={{ opacity: 0 }} animate={{ opacity: 1 }} style={styles.errorBox}>
-                            <Text variant="body" size="xs" color={Colors.ketoAvoid} align="center">
-                                {error}
-                            </Text>
-                        </MotiView>
-                    )}
+                    {/* Coming Soon Banner */}
+                    <MotiView
+                        from={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: 600 }}
+                        style={styles.comingSoonBanner}
+                    >
+                        <Text variant="body" size="sm" color={Colors.ketoSafe} align="center" weight="bold">
+                            🚀 Pro subscriptions launching soon!
+                        </Text>
+                    </MotiView>
                 </ScrollView>
 
                 <View style={styles.footer}>
                     <View style={styles.glassCard}>
                         <View style={styles.pricing}>
                             <View>
-                                {subscriptions.length > 0 ? (
-                                    <Text variant="heading" size="xl" color={Colors.white}>
-                                        {(subscriptions[0] as any).localizedPrice || '$9.99'}<Text size="sm" color={Colors.gray400}>/mo</Text>
-                                    </Text>
-                                ) : (
-                                    <View style={styles.pricePlaceholder}>
-                                        <Text variant="heading" size="xl" color={Colors.white}>$9.99</Text>
-                                    </View>
-                                )}
+                                <Text variant="heading" size="xl" color={Colors.white}>
+                                    $9.99<Text size="sm" color={Colors.gray400}>/mo</Text>
+                                </Text>
                                 <Text variant="body" size="xs" color={Colors.ketoSafe}>
                                     7-day free trial included
                                 </Text>
@@ -243,7 +149,7 @@ export function PaywallScreen({ onBack, onSuccess, userId, userEmail }: PaywallS
                                 onPress={handleUpgrade}
                                 loading={loading}
                             >
-                                Start Free Trial
+                                Coming Soon
                             </Button>
                         </View>
                         <TouchableOpacity onPress={handleRestore} style={styles.restoreBtn}>
@@ -252,7 +158,7 @@ export function PaywallScreen({ onBack, onSuccess, userId, userEmail }: PaywallS
                             </Text>
                         </TouchableOpacity>
                         <Text variant="body" size="xs" color={Colors.gray500} align="center" style={styles.legal}>
-                            Cancel anytime in App Store. By continuing, you agree to our Terms and Privacy Policy.
+                            Cancel anytime. By continuing, you agree to our Terms and Privacy Policy.
                         </Text>
                     </View>
                 </View>
@@ -264,7 +170,7 @@ export function PaywallScreen({ onBack, onSuccess, userId, userEmail }: PaywallS
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#0A0A0A', // Dark OLED-friendly background
+        backgroundColor: '#0A0A0A',
     },
     glow: {
         position: 'absolute',
@@ -275,7 +181,6 @@ const styles = StyleSheet.create({
         borderRadius: 150,
         backgroundColor: Colors.ketoSafeDim,
         opacity: 0.3,
-        filter: 'blur(100px)',
     },
     header: {
         flexDirection: 'row',
@@ -327,7 +232,7 @@ const styles = StyleSheet.create({
         width: 40,
         height: 40,
         borderRadius: BorderRadius.lg,
-        backgroundColor: 'rgba(16, 185, 129, 0.1)', // KetoSafe with low opacity
+        backgroundColor: 'rgba(16, 185, 129, 0.1)',
         justifyContent: 'center',
         alignItems: 'center',
     },
@@ -335,11 +240,13 @@ const styles = StyleSheet.create({
         flex: 1,
         gap: 2,
     },
-    errorBox: {
-        marginTop: Spacing.xl,
+    comingSoonBanner: {
+        marginTop: Spacing['2xl'],
         padding: Spacing.md,
-        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+        backgroundColor: 'rgba(16, 185, 129, 0.1)',
         borderRadius: BorderRadius.md,
+        borderWidth: 1,
+        borderColor: 'rgba(16, 185, 129, 0.2)',
     },
     footer: {
         position: 'absolute',
@@ -367,9 +274,6 @@ const styles = StyleSheet.create({
     },
     legal: {
         marginTop: Spacing.sm,
-    },
-    pricePlaceholder: {
-        minWidth: 80,
     },
     restoreBtn: {
         marginTop: Spacing.sm,
