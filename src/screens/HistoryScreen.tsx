@@ -29,6 +29,13 @@ export function HistoryScreen({ userId, onItemPress }: HistoryScreenProps) {
     const [refreshing, setRefreshing] = useState(false);
 
     const fetchHistory = useCallback(async () => {
+        // Guard: Skip for guest users (no valid userId)
+        if (!userId) {
+            setItems([]);
+            setLoading(false);
+            return;
+        }
+
         setLoading(true);
         try {
             // Fetch Meals

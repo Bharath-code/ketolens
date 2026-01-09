@@ -24,7 +24,6 @@ import {
 } from './src/screens'
 import { Loader } from './src/components/atoms'
 import { TabBar } from './src/components/layout'
-import * as RNIap from 'react-native-iap'
 import { supabase } from './src/services/supabase'
 import { analyzePhoto, AnalysisResult } from './src/services/aiService'
 import { ProductData } from './src/services/barcodeService'
@@ -107,6 +106,10 @@ export default function App() {
         } else {
           setHasCompletedQuiz(!!profile)
         }
+      } else {
+        // No session - check if guest completed quiz locally
+        const guestData = await ProfileService.getGuestData();
+        setHasCompletedQuiz(!!guestData)
       }
       setAuthInitialized(true)
     })
@@ -176,7 +179,12 @@ export default function App() {
           setCurrentScreen('quiz')
         }
       } else {
-        setCurrentScreen('splash')
+        // Guest user: check if they completed quiz (saved locally)
+        if (hasCompletedQuiz) {
+          setCurrentScreen('home')
+        } else {
+          setCurrentScreen('splash')
+        }
       }
     }
   }, [fontsLoaded, authInitialized, session, hasCompletedQuiz])
@@ -227,11 +235,11 @@ export default function App() {
         setCurrentScreen('home')
       }
     } else {
-      // Guest User: Save locally and go to Auth
+      // Guest User: Save locally and go to Home
       await ProfileService.saveGuestData(profileData, targets);
       AnalyticsService.track(EVENTS.QUIZ_COMPLETED, { method: 'guest' })
-      setHasCompletedQuiz(true); // Temporarily to allow progression
-      setCurrentScreen('auth');
+      setHasCompletedQuiz(true);
+      setCurrentScreen('home');
     }
   }, [session])
 
@@ -382,18 +390,7 @@ export default function App() {
     else if (tab === 'profile') setCurrentScreen('profile')
   }, [])
 
-  // Initialize IAP Connection
-  useEffect(() => {
-    RNIap.initConnection().then((result) => {
-      console.log('[IAP] Connection initialized:', result)
-    }).catch((err) => {
-      console.warn('[IAP] Connection failed:', err)
-    })
 
-    return () => {
-      RNIap.endConnection()
-    }
-  }, [])
 
   if (!fontsLoaded || !authInitialized) {
     return <Loader fullScreen message="Loading KetoLens..." />

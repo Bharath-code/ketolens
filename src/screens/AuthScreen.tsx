@@ -2,8 +2,6 @@ import React, { useState, useCallback } from 'react'
 import {
     View,
     StyleSheet,
-    KeyboardAvoidingView,
-    Platform,
     Alert,
     TouchableOpacity,
 } from 'react-native'
@@ -74,10 +72,7 @@ export function AuthScreen() {
 
     return (
         <Screen padding={false} scrollable={false}>
-            <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                style={styles.container}
-            >
+            <View style={styles.container}>
                 <View style={styles.header}>
                     <Text variant="display" align="center" style={styles.title}>
                         KetoLens
@@ -152,7 +147,7 @@ export function AuthScreen() {
                         </Text>
                     </TouchableOpacity>
                 </View>
-            </KeyboardAvoidingView>
+            </View>
         </Screen>
     )
 }
