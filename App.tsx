@@ -23,7 +23,7 @@ import {
   type HistoryItem
 } from './src/screens'
 import { Loader } from './src/components/atoms'
-import { TabBar } from './src/components/layout'
+import { TabBar, ErrorBoundary } from './src/components/layout'
 import { supabase } from './src/services/supabase'
 import { analyzePhoto, AnalysisResult } from './src/services/aiService'
 import { ProductData } from './src/services/barcodeService'
@@ -474,8 +474,37 @@ export default function App() {
           <HistoryScreen
             userId={session?.user?.id || ''}
             onItemPress={(item: HistoryItem) => {
-              // For now, just log. In future, we could navigate back to ResultScreen with this item's data
-              console.log('History item pressed:', item)
+              // Convert history item to result format and navigate
+              const historyMacros = { net_carbs: 0, fat: 0, protein: 0, calories: 0 };
+
+              if (item.type === 'meal') {
+                setAnalysisResult({
+                  score: item.score,
+                  verdict: item.verdict,
+                  reasoning: `From scan on ${item.timestamp.toLocaleDateString()}`,
+                  macros: historyMacros,
+                  swapSuggestion: '',
+                  foods: [],
+                  plateConfidence: 1.0,
+                });
+                setScanType('meal');
+              } else {
+                setProductResult({
+                  found: true,
+                  barcode: '',
+                  name: item.name,
+                  brand: '',
+                  macros: historyMacros,
+                  ingredients: [],
+                  ketoScore: item.score,
+                  ketoVerdict: item.verdict,
+                  swapSuggestion: '',
+                  source: 'shadow' as const,
+                });
+                setScanType('product');
+              }
+              setLastImage(item.imageUrl || null);
+              setCurrentScreen('result');
             }}
           />
         )
@@ -489,29 +518,31 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <StatusBar style="dark" />
-      <View style={[styles.container, { backgroundColor: Colors.white }]}>
-        <View style={styles.content}>
-          <AnimatePresence>
-            <MotiView
-              key={currentScreen}
-              from={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{
-                type: 'timing',
-                duration: 200,
-              }}
-              style={styles.screenWrapper}
-            >
-              {renderScreen()}
-            </MotiView>
-          </AnimatePresence>
+      <ErrorBoundary>
+        <StatusBar style="dark" />
+        <View style={[styles.container, { backgroundColor: Colors.white }]}>
+          <View style={styles.content}>
+            <AnimatePresence>
+              <MotiView
+                key={currentScreen}
+                from={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{
+                  type: 'timing',
+                  duration: 200,
+                }}
+                style={styles.screenWrapper}
+              >
+                {renderScreen()}
+              </MotiView>
+            </AnimatePresence>
+          </View>
+          {showTabBar && (
+            <TabBar activeTab={activeTab} onTabChange={handleTabChange} />
+          )}
         </View>
-        {showTabBar && (
-          <TabBar activeTab={activeTab} onTabChange={handleTabChange} />
-        )}
-      </View>
+      </ErrorBoundary>
     </SafeAreaProvider>
   )
 }
